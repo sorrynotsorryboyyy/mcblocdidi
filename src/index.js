@@ -4,8 +4,23 @@ const path = require('node:path');
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const { loadCommands } = require('./utils/commands');
 
-if (!process.env.DISCORD_TOKEN) {
+// Nettoie le token (erreurs de copier-coller fréquentes sur Railway :
+// espaces, retours à la ligne, guillemets, "DISCORD_TOKEN=" ou "Bot " collés dans la valeur)
+const token = (process.env.DISCORD_TOKEN ?? '')
+  .replace(/\s+/g, ' ')
+  .replace(/["'`]/g, '')
+  .trim()
+  .replace(/^DISCORD_TOKEN\s*=\s*/i, '')
+  .replace(/^Bot\s+/i, '')
+  .replace(/\s+/g, '');
+
+if (!token) {
   console.error('❌ DISCORD_TOKEN manquant. En local : remplis .env — sur Railway : onglet Variables.');
+  process.exit(1);
+}
+if (!/^[\w-]{20,}\.[\w-]{4,}\.[\w-]{20,}$/.test(token)) {
+  console.error(`❌ DISCORD_TOKEN a un format invalide (${token.length} caractères, ${token.split('.').length} parties au lieu de 3).`
+    + '\n   Colle uniquement le token (Developer Portal → Bot → Reset Token), sans guillemets ni "DISCORD_TOKEN=".');
   process.exit(1);
 }
 
@@ -44,7 +59,7 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
   });
 }
 
-client.login(process.env.DISCORD_TOKEN).catch((err) => {
+client.login(token).catch((err) => {
   if (String(err.message).includes('disallowed intents')) {
     console.error('❌ Active "SERVER MEMBERS INTENT" et "MESSAGE CONTENT INTENT" dans le Developer Portal (onglet Bot).');
   } else if (String(err.message).toLowerCase().includes('token')) {
