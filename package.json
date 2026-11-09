@@ -1,0 +1,19 @@
+{
+  "name": "mcblocdidi",
+  "version": "1.0.0",
+  "description": "Bot Discord pour serveur Minecraft mini-jeux",
+  "main": "src/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.28.1",
+    "dotenv": "^18.0.9",
+    "minecraft-server-util": "^5.4.4"
+  }
+}
