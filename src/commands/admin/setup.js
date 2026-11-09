@@ -126,6 +126,8 @@ async function ensureChannel(guild, g, { key, name, type, parent, overwrites, to
     channel = await guild.channels.create({ name, type, parent: parent?.id, topic, permissionOverwrites: overwrites, reason: '/setup' });
   } else {
     const edit = { permissionOverwrites: overwrites, reason: '/setup' };
+    // Renomme si le nom de base a changé dans config.js (pas pour l'emoji d'état / la valeur d'un compteur)
+    if (coreName(channel.name) !== coreName(name)) edit.name = name;
     if (parent && channel.parentId !== parent.id) edit.parent = parent.id;
     if (topic && 'topic' in channel && channel.topic !== topic) edit.topic = topic;
     await channel.edit(edit);
@@ -180,6 +182,28 @@ module.exports = {
     const g = db.guild(guild.id);
     removedDuplicates = [];
     const step =(txt) => interaction.editReply({ embeds: [embeds.base(config.colors.info).setDescription(`⏳ ${txt}`)] });
+
+    // 0. Mini-jeux renommés (formerIds) : on réutilise l'ancien salon et l'ancien rôle,
+    //    qui seront renommés plus bas (les messages sont conservés)
+    for (const m of config.minigames) {
+      for (const old of m.formerIds ?? []) {
+        const newKey = `game_${m.id}`;
+        const oldKey = `game_${old}`;
+        if (!g.roles[newKey]) {
+          const role = guild.roles.cache.get(g.roles[oldKey])
+            ?? guild.roles.cache.find((r) => coreName(r.name) === coreName(old.replace(/-/g, ' ')));
+          if (role) g.roles[newKey] = role.id;
+        }
+        if (!g.channels[newKey]) {
+          const ch = guild.channels.cache.get(g.channels[oldKey])
+            ?? guild.channels.cache.find((c) => c.type === ChannelType.GuildText && coreName(c.name) === old);
+          if (ch) g.channels[newKey] = ch.id;
+        }
+        delete g.roles[oldKey];
+        delete g.channels[oldKey];
+      }
+    }
+    db.save();
 
     // 1. Rôles (créés du haut vers le bas : chaque nouveau rôle arrive en bas de la liste)
     await step('Création des rôles...');
@@ -248,6 +272,7 @@ module.exports = {
     duplicates += await ensurePanel(guild, g, 'roles', 'roles', embeds.rolesPanel(guild));
     duplicates += await ensurePanel(guild, g, 'ticket', 'ticketPanel', embeds.ticketPanel());
     duplicates += await ensurePanel(guild, g, 'status', 'status', { embeds: [embeds.statusEmbed(status)] });
+    duplicates += await ensurePanel(guild, g, 'partnersAdmin', 'partnersAdmin', embeds.partnersAdminPanel());
     db.save();
 
     // 4. Rôle Non vérifié pour les membres qui n'ont pas encore le rôle Membre

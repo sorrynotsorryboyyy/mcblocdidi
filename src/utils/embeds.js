@@ -173,6 +173,40 @@ function suggestionMessage(s) {
   return { embeds: [embed], components };
 }
 
+// ---------- Partenaires ----------
+
+/** Fiche publique d'un partenaire (salon #partenaires). */
+function partnerMessage(p) {
+  const embed = base(p.color ?? 0x9b59b6)
+    .setTitle(`🤝 ${p.name}`)
+    .setDescription(p.description);
+  if (p.image) embed.setThumbnail(p.image);
+  if (p.website) embed.addFields({ name: '🌐 Site', value: p.website, inline: true });
+  if (p.discord) embed.addFields({ name: '💬 Discord', value: p.discord, inline: true });
+
+  const buttons = [];
+  if (p.website) buttons.push(new ButtonBuilder().setLabel('Site web').setEmoji('🌐').setStyle(ButtonStyle.Link).setURL(p.website));
+  if (p.discord) buttons.push(new ButtonBuilder().setLabel('Rejoindre le Discord').setEmoji('💬').setStyle(ButtonStyle.Link).setURL(p.discord));
+  return { embeds: [embed], components: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [] };
+}
+
+/** Panneau staff (salon #gestion-partenaires). */
+function partnersAdminPanel() {
+  const embed = base(0x9b59b6)
+    .setTitle('🤝 Gestion des partenaires')
+    .setDescription(
+      'Gère ici les partenaires affichés dans le salon public **#partenaires**.\n\n'
+      + '➕ **Ajouter** — crée une nouvelle fiche partenaire\n'
+      + '✏️ **Gérer** — modifier ou retirer une fiche existante\n\n'
+      + '> Champs : nom, description, site, invitation Discord, logo (URL d\'image).',
+    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('partner_add').setLabel('Ajouter un partenaire').setEmoji('➕').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('partner_manage').setLabel('Gérer les partenaires').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
 // ---------- Giveaways ----------
 
 function giveawayMessage(gw) {
@@ -257,4 +291,5 @@ module.exports = {
   base, success, error, ip,
   rulesPanel, verifyPanel, infoPanel, statusEmbed, rolesPanel, ticketPanel,
   welcomeEmbed, leaveEmbed, tournamentMessage, suggestionMessage, giveawayMessage,
+  partnerMessage, partnersAdminPanel,
 };

@@ -17,6 +17,7 @@ const DEFAULTS = () => ({
   tournaments: {},  // id → { ... }
   suggestions: {},  // id → { ... }
   giveaways: {},    // id → { ... }
+  partners: {},     // id → { name, description, website, discord, image, channelId, messageId }
   state: {},        // divers (ex. mcOnline)
 });
 

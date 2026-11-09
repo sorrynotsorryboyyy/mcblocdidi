@@ -112,11 +112,13 @@ module.exports = {
   // ------------------------------------------------------------
   //  MINI-JEUX : un salon + un rôle de notif sont créés pour chacun
   //  (max 20). `id` = nom du salon, en minuscules sans espaces.
+  //  `formerIds` : anciens ids → le salon et le rôle existants sont RENOMMÉS
+  //  (messages conservés) au lieu d'être supprimés puis recréés.
   // ------------------------------------------------------------
   minigames: [
     { id: 'piggy-wars', name: 'Piggy Wars', emoji: '🐷', description: 'Description à compléter.' },
     { id: 'sumo-tower', name: 'Sumo Tower', emoji: '🗼', description: 'Description à compléter.' },
-    { id: 'fallen-clan', name: 'Fallen Clan', emoji: '⚔️', description: 'Description à compléter.' },
+    { id: 'corewars', name: 'CoreWars', emoji: '🔮', description: 'Description à compléter.', formerIds: ['fallen-clan'] },
   ],
 
   // ------------------------------------------------------------
@@ -146,6 +148,7 @@ module.exports = {
     },
     support: { name: '🎫 Support', color: 0x1abc9c, hoist: true, permissions: ['ManageMessages'] },
     vip: { name: '💎 VIP', color: 0xf1c40f, hoist: true, permissions: [] },
+    partner: { name: '🤝 Partenaire', color: 0x9b59b6, hoist: true, permissions: [] },
     member: { name: '✅ Membre', color: 0x95a5a6, hoist: false, permissions: [] },
     unverified: { name: '🔒 Non vérifié', color: 0x546e7a, hoist: false, permissions: [] },
     notifAnnonces: { name: '🔔 Annonces', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des annonces' },
@@ -179,6 +182,7 @@ module.exports = {
         { key: 'info', name: 'ℹ️┃infos-serveur', access: 'readonly', topic: 'IP, version et liens utiles' },
         { key: 'status', name: '📊┃statut-serveur', access: 'readonly', topic: 'Statut du serveur Minecraft en direct' },
         { key: 'roles', name: '🎭┃rôles', access: 'readonly', topic: 'Choisis tes rôles' },
+        { key: 'partners', name: '🤝┃partenaires', access: 'readonly', topic: 'Nos partenaires' },
       ],
     },
     {
@@ -227,6 +231,7 @@ module.exports = {
       channels: [
         { key: 'staff', name: '🛡️┃staff', access: 'staff' },
         { key: 'logs', name: '📋┃logs', access: 'staff' },
+        { key: 'partnersAdmin', name: '🤝┃gestion-partenaires', access: 'staff', topic: 'Ajouter / modifier / retirer un partenaire' },
       ],
     },
   ],
