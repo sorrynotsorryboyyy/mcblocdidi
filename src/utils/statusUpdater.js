@@ -21,10 +21,15 @@ async function updateStatusMessage(guild, s) {
   const channel = guild.channels.cache.get(ref.channelId);
   if (!channel) return;
 
-  const msg = await channel.messages.fetch(ref.messageId).catch(() => null);
+  let deleted = false;
+  const msg = await channel.messages.fetch(ref.messageId).catch((err) => {
+    deleted = err.code === 10008; // Unknown Message : vraiment supprimé
+    return null;
+  });
   if (msg) {
     await msg.edit({ embeds: [statusEmbed(s)] }).catch(() => null);
-  } else {
+  } else if (deleted) {
+    // Le message a été supprimé : on le reposte (une erreur réseau passagère ne crée pas de doublon)
     const sent = await channel.send({ embeds: [statusEmbed(s)] }).catch(() => null);
     if (sent) { g.messages.status = { channelId: channel.id, messageId: sent.id }; db.save(); }
   }

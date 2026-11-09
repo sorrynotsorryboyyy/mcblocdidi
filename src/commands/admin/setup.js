@@ -99,14 +99,29 @@ async function ensureChannel(guild, g, { key, name, type, parent, overwrites, to
 // ---------- Panneaux (embeds) ----------
 async function ensurePanel(guild, g, key, channelKey, payload) {
   const channel = getChannel(guild, channelKey);
-  if (!channel) return;
+  if (!channel) return 0;
+  const meId = guild.members.me.id;
+
+  // Messages du bot avec embed déjà présents dans le salon (les plus récents d'abord)
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const mine = recent ? [...recent.filter((m) => m.author.id === meId && m.embeds.length).values()] : [];
+
+  // 1. Message enregistré en base ; 2. sinon, le dernier message du bot dans ce salon
+  //    (cas d'une base vide, ex. premier déploiement sur Railway) ; 3. sinon, nouveau message
   const ref = g.messages[key];
-  if (ref?.channelId === channel.id) {
-    const msg = await channel.messages.fetch(ref.messageId).catch(() => null);
-    if (msg) { await msg.edit(payload); return; }
-  }
-  const sent = await channel.send(payload);
-  g.messages[key] = { channelId: channel.id, messageId: sent.id };
+  let msg = ref?.channelId === channel.id
+    ? mine.find((m) => m.id === ref.messageId) ?? await channel.messages.fetch(ref.messageId).catch(() => null)
+    : null;
+  msg ??= mine[0] ?? null;
+
+  if (msg) await msg.edit(payload);
+  else msg = await channel.send(payload);
+  g.messages[key] = { channelId: channel.id, messageId: msg.id };
+
+  // Supprime les doublons (autres embeds du bot dans ce salon dédié)
+  const duplicates = mine.filter((m) => m.id !== msg.id);
+  for (const d of duplicates) await d.delete().catch(() => null);
+  return duplicates.length;
 }
 
 module.exports = {
@@ -187,12 +202,13 @@ module.exports = {
 
     // 3. Panneaux
     await step('Envoi des embeds...');
-    await ensurePanel(guild, g, 'rules', 'rules', embeds.rulesPanel(guild));
-    await ensurePanel(guild, g, 'verify', 'verify', embeds.verifyPanel(guild));
-    await ensurePanel(guild, g, 'info', 'info', embeds.infoPanel(guild));
-    await ensurePanel(guild, g, 'roles', 'roles', embeds.rolesPanel(guild));
-    await ensurePanel(guild, g, 'ticket', 'ticketPanel', embeds.ticketPanel());
-    await ensurePanel(guild, g, 'status', 'status', { embeds: [embeds.statusEmbed(status)] });
+    let duplicates = 0;
+    duplicates += await ensurePanel(guild, g, 'rules', 'rules', embeds.rulesPanel(guild));
+    duplicates += await ensurePanel(guild, g, 'verify', 'verify', embeds.verifyPanel(guild));
+    duplicates += await ensurePanel(guild, g, 'info', 'info', embeds.infoPanel(guild));
+    duplicates += await ensurePanel(guild, g, 'roles', 'roles', embeds.rolesPanel(guild));
+    duplicates += await ensurePanel(guild, g, 'ticket', 'ticketPanel', embeds.ticketPanel());
+    duplicates += await ensurePanel(guild, g, 'status', 'status', { embeds: [embeds.statusEmbed(status)] });
     db.save();
 
     // 4. Rôle Non vérifié pour les membres qui n'ont pas encore le rôle Membre
@@ -214,6 +230,9 @@ module.exports = {
         + '👉 Pense à t\'attribuer le rôle 👑 Fondateur.\n'
         + '👉 Tu peux relancer `/setup` à tout moment après avoir modifié `config.js`.',
       );
+    if (duplicates) {
+      summary.addFields({ name: '🧹 Doublons supprimés', value: `${duplicates} ancien(s) embed(s) en double retiré(s).` });
+    }
     if (removedGames.length) {
       summary.addFields({ name: '🗑️ Anciens mini-jeux supprimés', value: removedGames.join(', ').slice(0, 1024) });
     }
