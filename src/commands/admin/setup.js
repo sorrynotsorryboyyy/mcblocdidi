@@ -80,9 +80,47 @@ function overwritesFor(access, guild, R) {
 }
 
 // ---------- Salons ----------
+
+/**
+ * Nom « de base » d'un salon, sans les parties que le bot modifie lui-même :
+ *   "🔴┃statut-serveur" → "statut-serveur"   (emoji d'état)
+ *   "👥 Membres : 12"   → "membres"          (valeur du compteur)
+ */
+function coreName(name) {
+  let n = name.includes('┃') ? name.split('┃').slice(1).join('┃') : name;
+  if (n.includes(':')) n = n.split(':')[0];
+  return n.toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, ' ').trim();
+}
+
+let removedDuplicates = []; // rempli par ensureChannel pendant un /setup
+
+/** Un doublon est supprimable seulement s'il est vide (aucun message d'un humain, personne en vocal). */
+async function isDisposable(channel) {
+  if (channel.type === ChannelType.GuildVoice) return channel.members.size === 0;
+  if (!channel.isTextBased()) return false;
+  const msgs = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+  return !!msgs && !msgs.some((m) => !m.author.bot);
+}
+
 async function ensureChannel(guild, g, { key, name, type, parent, overwrites, topic }) {
+  const parentId = parent?.id ?? null;
+  const sameKind = (c) => c.type === type && (c.parentId ?? null) === parentId && coreName(c.name) === coreName(name);
+  const candidates = guild.channels.cache.filter(sameKind);
+
   let channel = guild.channels.cache.get(g.channels[key])
-    ?? guild.channels.cache.find((c) => c.name === name && c.type === type && (c.parentId ?? null) === (parent?.id ?? null));
+    ?? candidates.find((c) => c.name === name)
+    ?? candidates.sort((a, b) => a.createdTimestamp - b.createdTimestamp).first();
+
+  // Supprime les doublons vides (créés par d'anciens /setup)
+  if (channel) {
+    for (const dup of candidates.values()) {
+      if (dup.id === channel.id || dup.type === ChannelType.GuildCategory) continue;
+      if (await isDisposable(dup)) {
+        await dup.delete('/setup : salon en double').catch(() => null);
+        removedDuplicates.push(dup.name);
+      }
+    }
+  }
 
   if (!channel) {
     channel = await guild.channels.create({ name, type, parent: parent?.id, topic, permissionOverwrites: overwrites, reason: '/setup' });
@@ -140,7 +178,8 @@ module.exports = {
     }
 
     const g = db.guild(guild.id);
-    const step = (txt) => interaction.editReply({ embeds: [embeds.base(config.colors.info).setDescription(`⏳ ${txt}`)] });
+    removedDuplicates = [];
+    const step =(txt) => interaction.editReply({ embeds: [embeds.base(config.colors.info).setDescription(`⏳ ${txt}`)] });
 
     // 1. Rôles (créés du haut vers le bas : chaque nouveau rôle arrive en bas de la liste)
     await step('Création des rôles...');
@@ -230,6 +269,9 @@ module.exports = {
         + '👉 Pense à t\'attribuer le rôle 👑 Fondateur.\n'
         + '👉 Tu peux relancer `/setup` à tout moment après avoir modifié `config.js`.',
       );
+    if (removedDuplicates.length) {
+      summary.addFields({ name: '🧹 Salons en double supprimés', value: removedDuplicates.join(', ').slice(0, 1024) });
+    }
     if (duplicates) {
       summary.addFields({ name: '🧹 Doublons supprimés', value: `${duplicates} ancien(s) embed(s) en double retiré(s).` });
     }
