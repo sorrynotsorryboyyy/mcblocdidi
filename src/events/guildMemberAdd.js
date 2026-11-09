@@ -1,6 +1,7 @@
 const { Events } = require('discord.js');
 const { getChannel, getRole } = require('../utils/helpers');
 const { welcomeEmbed } = require('../utils/embeds');
+const invites = require('../utils/invites');
 
 module.exports = {
   name: Events.GuildMemberAdd,
@@ -12,5 +13,7 @@ module.exports = {
 
     const channel = getChannel(member.guild, 'welcome');
     if (channel) await channel.send({ content: `${member}`, embeds: [welcomeEmbed(member)] }).catch(() => null);
+
+    await invites.onJoin(member);
   },
 };

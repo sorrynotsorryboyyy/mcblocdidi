@@ -5,6 +5,7 @@ const { base } = require('../../utils/embeds');
 const CATEGORIES = {
   general: '📖 Général',
   minecraft: '🎮 Minecraft & Mini-jeux',
+  compte: '🔗 Compte & récompenses',
   moderation: '🛡️ Modération',
   admin: '⚙️ Administration',
 };

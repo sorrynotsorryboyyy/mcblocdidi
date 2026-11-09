@@ -18,6 +18,11 @@ const DEFAULTS = () => ({
   suggestions: {},  // id → { ... }
   giveaways: {},    // id → { ... }
   partners: {},     // id → { name, description, website, discord, image, channelId, messageId }
+  invites: {},      // inviteeId → { inviterId, code, joinedAt, verifiedAt, status }
+  boosts: {},       // userId → { count, roleByBoost, lastBoostAt }
+  links: {},        // discordId → { uuid, name, linkedAt }
+  linkCodes: {},    // code → { discordId, expiresAt }
+  rewards: {},      // id → { discordId, type, amount|months, label, status, tries, createdAt }
   state: {},        // divers (ex. mcOnline)
 });
 

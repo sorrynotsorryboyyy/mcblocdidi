@@ -1,57 +1,78 @@
-# 🎮 Bot Discord — McBlocDidi (serveur Minecraft mini-jeux)
+# 🎮 Bot Discord — McBlocDidi (réseau Minecraft mini-jeux)
 
-Bot Discord (discord.js v14) qui **configure tout le serveur en une commande** et gère :
-statut Minecraft en direct, vérification, rôles à choisir, tickets par catégorie, modération + auto-mod,
-suggestions, giveaways, LFG, tournois et salons compteurs.
+Bot Discord (discord.js v14) qui **configure tout le serveur en une commande** et le relie au réseau Minecraft :
+statut en direct, vérification, rôles, tickets, modération + auto-mod, suggestions, giveaways, tournois, LFG,
+partenaires, **parrainage récompensé en pièces** et **VIP en jeu pour chaque boost**.
 
 ---
 
 ## 🚀 Héberger sur Railway
 
-### 1. Créer le projet
-1. <https://railway.com> → **New Project** → **Deploy from GitHub repo** → choisis `mcblocdidi`.
-2. Railway détecte Node.js et lance `npm start` automatiquement (voir `railway.json`).
+### 1. Projet et variables
+<https://railway.com> → **New Project** → **Deploy from GitHub repo** → `mcblocdidi`. Onglet **Variables** :
 
-### 2. Variables (onglet **Variables** du service)
 | Variable | Valeur |
 |---|---|
-| `DISCORD_TOKEN` | le token du bot |
+| `DISCORD_TOKEN` | le token du bot (uniquement la valeur, sans guillemets) |
 | `CLIENT_ID` | l'ID de l'application |
 | `GUILD_ID` | l'ID du serveur Discord |
 | `DATA_DIR` | `/data` |
-| `MC_HOST` / `MC_PORT` | *(optionnel)* pour changer l'IP Minecraft sans toucher au code |
-| `DB_SEED` | *(optionnel, 1ʳᵉ fois)* ta base locale encodée, voir ci-dessous |
+| `BRIDGE_SECRET` | une longue chaîne aléatoire (≥ 32 caractères), **identique** dans la config du proxy |
+| `INVITE_REWARD` | *(optionnel)* pièces par invitation validée, 500 par défaut |
+| `MC_HOST` / `MC_PORT` | *(optionnel)* IP du serveur Minecraft |
 
-### 3. Ajouter un Volume (IMPORTANT)
-Sans volume, Railway efface les fichiers à chaque mise à jour : le bot oublierait warns, giveaways, tournois…
-→ Clic droit sur le service (ou **Ctrl+K**) → **Add Volume** → *Mount path* : **`/data`**.
+### 2. Volume (indispensable)
+Clic droit sur le service → **Add Volume** → *Mount path* **`/data`**. Sans volume, le bot oublie tout à chaque mise à jour.
 
-### 4. (Optionnel) Reprendre la base locale
-Pour garder les données de ton PC (warns, IDs des salons…), avant le premier déploiement :
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("data\db.json")) | Set-Clipboard
-```
-Colle le résultat dans une variable `DB_SEED`. Elle n'est utilisée que si le volume est vide ; tu peux la supprimer ensuite.
-*(Sinon, relancer `/setup` suffit : il retrouve les salons et rôles existants par leur nom.)*
+### 3. Domaine public (pour le pont Minecraft)
+**Settings → Networking → Generate Domain**. Note l'adresse, ex. `https://mcblocdidi-production.up.railway.app`.
 
-### 5. Déployer
-- Chaque `git push` sur GitHub redéploie automatiquement le bot.
-- Logs : onglet **Deployments** → tu dois voir `✅ Connecté en tant que MCBLOC`.
-- ⚠️ **Arrête le bot sur ton PC** quand il tourne sur Railway, sinon deux instances répondront en même temps.
+### 4. Déployer
+Chaque `git push` redéploie. Logs attendus : `🌉 API du pont…` puis `✅ Connecté en tant que MCBLOC`.
+⚠️ N'oublie pas d'arrêter le bot sur ton PC : deux instances répondraient en même temps.
 
 ---
 
-## 💻 Lancer en local
+## 🌉 Pont Discord ↔ Minecraft (mcblocManager)
 
-1. Copie `.env.example` en `.env` et remplis `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`.
-2. `npm install` (une fois), puis `npm start`.
+Le **proxy BungeeCord** interroge le bot toutes les 30 s (connexion sortante : aucun port à ouvrir, MySQL reste privé).
 
-Les commandes slash sont **enregistrées automatiquement au démarrage** (`npm run deploy` reste disponible en secours).
+1. Compile `mcblocManager` (`gradlew build`) et dépose **`proxy/build/libs/mcbloc-proxy-1.0.jar`** dans `plugins/` du BungeeCord.
+2. Dans `plugins/mcbloc-proxy/config.yml` :
+   ```yaml
+   discord-bridge:
+     enabled: true
+     url: "https://mcblocdidi-production.up.railway.app"   # ton domaine Railway
+     secret: "la-même-valeur-que-BRIDGE_SECRET"
+     poll-seconds: 30
+   ```
+3. Redémarre le proxy. Log attendu : `Pont Discord actif (...)`. La table `mcbloc_discord_rewards` est créée automatiquement.
 
-### Prérequis Discord (Developer Portal → onglet Bot)
-- **SERVER MEMBERS INTENT** et **MESSAGE CONTENT INTENT** activés.
-- Bot invité avec les scopes `bot` + `applications.commands` et la permission Administrateur.
-- Rôle du bot placé **tout en haut** de la liste des rôles.
+**Liaison de compte** : `/lier` sur Discord → code `MCB-XXXXXX` (10 min, usage unique) → `/lier MCB-XXXXXX` en jeu.
+Chaque récompense a un identifiant unique : elle ne peut **jamais** être donnée deux fois, même en cas de coupure.
+
+---
+
+## 🎁 Parrainage et boosts
+
+| | Règle |
+|---|---|
+| **Invitation** | Le parrain gagne **500 pièces** quand l'invité a accepté le règlement, est toujours là **3 jours** après, et a un compte Discord de plus de **7 jours**. Une seule récompense par invité, à vie. |
+| **Boost** | Chaque boost acheté = **1 mois de VIP en jeu, cumulable** (2 boosts = 2 mois) + rôle 💎 VIP sur Discord tant que le membre booste. Un VIP permanent n'est pas modifié. |
+
+Salons : **#📨┃invitations** (arrivées + classement des parrains) et **#🚀┃boosters** (remerciements + liste des boosters).
+Les messages système de Discord (boosts) sont envoyés dans #logs : c'est le bot qui remercie publiquement, sans doublon.
+Tant qu'un membre n'a pas lié son compte, ses récompenses restent en attente (il est prévenu en MP).
+
+---
+
+## 💻 En local
+
+1. `.env.example` → `.env`, remplis les variables.
+2. `npm install` puis `npm start` (les commandes slash s'enregistrent toutes seules).
+3. `npm run check` : linter + tests automatiques.
+
+Developer Portal → Bot : **SERVER MEMBERS INTENT** et **MESSAGE CONTENT INTENT** activés, rôle du bot **tout en haut**.
 
 ---
 
@@ -60,14 +81,13 @@ Les commandes slash sont **enregistrées automatiquement au démarrage** (`npm r
 | Clé | Rôle |
 |---|---|
 | `serverName`, `minecraft`, `links` | nom, IP, version, liens |
-| `minigames` | mini-jeux (un salon + un rôle chacun). Retirer un jeu puis relancer `/setup` supprime son salon et son rôle |
-| `rules` | règlement affiché dans #règles |
-| `ticketTypes` | catégories de tickets et leurs questions (5 max) |
-| `autoMod` | anti-invitations, anti-spam, anti-mentions, sanctions automatiques |
-| `announceOnline` | annonce quand le serveur MC repasse en ligne |
+| `minigames` | mini-jeux (un salon + un rôle chacun). `formerIds` = renommage sans perte de messages |
+| `invites`, `boosts` | montants et conditions du parrainage / des boosts |
+| `ticketTypes`, `autoMod`, `rules` | tickets, auto-modération, règlement |
 | `roles`, `categories` | rôles et salons créés par `/setup` |
 
-Après une modification : `git push` (Railway) ou redémarre le bot, puis relance **`/setup`** si tu as touché aux salons, rôles, jeux, règles ou tickets.
+Après une modification : `git push`, puis **`/setup`** si tu as touché aux salons, rôles, jeux, règles ou tickets.
+`/setup` est relançable sans risque : rien n'est dupliqué, les salons renommés sont retrouvés, les doublons vides supprimés.
 
 ---
 
@@ -75,36 +95,24 @@ Après une modification : `git push` (Railway) ou redémarre le bot, puis relanc
 
 | Commande | Description | Qui |
 |---|---|---|
-| `/help`, `/ping` | Aide, latence | Tous |
-| `/ip`, `/status`, `/jeux` | Infos serveur Minecraft | Tous |
-| `/suggestion <idée>` | Propose une idée (votes 👍/👎 + fil de discussion) | Tous |
-| `/lfg <jeu>` | Cherche des joueurs (ping le rôle du jeu) | Tous |
-| `/tournoi creer` / `liste` | Tournoi avec inscriptions | Staff |
-| `/giveaway lancer` / `terminer` / `reroll` / `liste` | Giveaways | Staff |
-| `/ban`, `/unban`, `/kick`, `/mute`, `/unmute` | Sanctions | Modérateurs |
-| `/warn`, `/warns voir/retirer/effacer` | Avertissements | Modérateurs |
-| `/clear <nombre> [membre]` | Supprime des messages | Modérateurs |
-| `/embed [salon]` | Embed personnalisé | Staff |
+| `/help`, `/ping`, `/ip`, `/status`, `/jeux` | Infos | Tous |
+| `/lier`, `/delier`, `/compte` | Liaison Minecraft, récompenses | Tous |
+| `/invitations [membre]` | Invitations et classement | Tous |
+| `/suggestion`, `/lfg` | Idées, recherche de joueurs | Tous |
+| `/tournoi`, `/giveaway`, `/embed` | Événements | Staff |
+| `/ban`, `/unban`, `/kick`, `/mute`, `/unmute`, `/warn`, `/warns`, `/clear` | Modération | Modérateurs |
 | `/setup` | Configure / met à jour le serveur | Admin |
 
-## 🤖 Automatique
-
-- **📊 STATISTIQUES** : salons compteurs (membres, joueurs en jeu, état du serveur), mis à jour toutes les 10 min.
-- **#statut-serveur** : embed mis à jour chaque minute, salon renommé 🟢/🔴, présence du bot = joueurs connectés.
-- **Annonce** dans #annonces (ping 🔔 Annonces) quand le serveur Minecraft redémarre.
-- **Vérification** : rôle 🔒 Non vérifié à l'arrivée → bouton « J'accepte » → ✅ Membre.
-- **Tickets** : menu (Support, Signalement, Boutique, Bug, Candidature) → formulaire → salon privé → fermer / rouvrir / supprimer (transcription dans #logs).
-- **Auto-mod** : invitations Discord et mentions de masse supprimées + warn, spam → mute 5 min. 3 warns → mute 1 h, 5 warns → mute 24 h. Le staff n'est jamais concerné.
-- **Logs** : sanctions, tickets, suggestions traitées → #logs.
+**Partenaires** : panneau dans #gestion-partenaires (staff) → ajouter / modifier / retirer ; fiches publiques dans #partenaires.
 
 ## 📁 Structure
 
 ```
-config.js              ← toute la configuration
-railway.json           ← config de déploiement Railway
-src/index.js           ← démarrage
-src/commands/          ← une commande par fichier (admin, general, minecraft, moderation)
-src/events/            ← ready, interactions, messages (auto-mod), arrivées/départs
-src/handlers/          ← boutons, menus et formulaires
-src/utils/             ← db, embeds, statut MC, compteurs, sanctions, giveaways...
+config.js            ← toute la configuration
+src/api/             ← API du pont Minecraft (récompenses, liaison)
+src/commands/        ← une commande par fichier
+src/events/          ← événements Discord
+src/handlers/        ← boutons, menus, formulaires
+src/utils/           ← db, panneaux anti-doublons, invitations, boosts, récompenses...
+test/                ← tests automatiques (npm test)
 ```

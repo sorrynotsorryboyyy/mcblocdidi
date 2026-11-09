@@ -1,7 +1,7 @@
 // /setup : crée (ou met à jour) rôles, catégories, salons, permissions et panneaux.
 // Relançable sans risque : ce qui existe déjà est réutilisé, rien n'est dupliqué.
 const {
-  SlashCommandBuilder, PermissionFlagsBits: P, ChannelType, MessageFlags,
+  SlashCommandBuilder, PermissionFlagsBits: P, ChannelType, MessageFlags, GuildSystemChannelFlags,
 } = require('discord.js');
 const config = require('../../../config');
 const db = require('../../utils/db');
@@ -9,6 +9,9 @@ const { allRoleDefs, getChannel } = require('../../utils/helpers');
 const embeds = require('../../utils/embeds');
 const { getStatus } = require('../../utils/mcstatus');
 const counters = require('../../utils/counters');
+const { ensurePanel } = require('../../utils/panels');
+const invites = require('../../utils/invites');
+const boosts = require('../../utils/boosts');
 
 // ---------- Rôles ----------
 async function ensureRole(guild, def, g) {
@@ -136,34 +139,6 @@ async function ensureChannel(guild, g, { key, name, type, parent, overwrites, to
   return channel;
 }
 
-// ---------- Panneaux (embeds) ----------
-async function ensurePanel(guild, g, key, channelKey, payload) {
-  const channel = getChannel(guild, channelKey);
-  if (!channel) return 0;
-  const meId = guild.members.me.id;
-
-  // Messages du bot avec embed déjà présents dans le salon (les plus récents d'abord)
-  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-  const mine = recent ? [...recent.filter((m) => m.author.id === meId && m.embeds.length).values()] : [];
-
-  // 1. Message enregistré en base ; 2. sinon, le dernier message du bot dans ce salon
-  //    (cas d'une base vide, ex. premier déploiement sur Railway) ; 3. sinon, nouveau message
-  const ref = g.messages[key];
-  let msg = ref?.channelId === channel.id
-    ? mine.find((m) => m.id === ref.messageId) ?? await channel.messages.fetch(ref.messageId).catch(() => null)
-    : null;
-  msg ??= mine[0] ?? null;
-
-  if (msg) await msg.edit(payload);
-  else msg = await channel.send(payload);
-  g.messages[key] = { channelId: channel.id, messageId: msg.id };
-
-  // Supprime les doublons (autres embeds du bot dans ce salon dédié)
-  const duplicates = mine.filter((m) => m.id !== msg.id);
-  for (const d of duplicates) await d.delete().catch(() => null);
-  return duplicates.length;
-}
-
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup')
@@ -266,13 +241,31 @@ module.exports = {
     // 3. Panneaux
     await step('Envoi des embeds...');
     let duplicates = 0;
-    duplicates += await ensurePanel(guild, g, 'rules', 'rules', embeds.rulesPanel(guild));
-    duplicates += await ensurePanel(guild, g, 'verify', 'verify', embeds.verifyPanel(guild));
-    duplicates += await ensurePanel(guild, g, 'info', 'info', embeds.infoPanel(guild));
-    duplicates += await ensurePanel(guild, g, 'roles', 'roles', embeds.rolesPanel(guild));
-    duplicates += await ensurePanel(guild, g, 'ticket', 'ticketPanel', embeds.ticketPanel());
-    duplicates += await ensurePanel(guild, g, 'status', 'status', { embeds: [embeds.statusEmbed(status)] });
-    duplicates += await ensurePanel(guild, g, 'partnersAdmin', 'partnersAdmin', embeds.partnersAdminPanel());
+    duplicates += await ensurePanel(guild, 'rules', 'rules', embeds.rulesPanel(guild));
+    duplicates += await ensurePanel(guild, 'verify', 'verify', embeds.verifyPanel(guild));
+    duplicates += await ensurePanel(guild, 'info', 'info', embeds.infoPanel(guild));
+    duplicates += await ensurePanel(guild, 'roles', 'roles', embeds.rolesPanel(guild));
+    duplicates += await ensurePanel(guild, 'ticket', 'ticketPanel', embeds.ticketPanel());
+    duplicates += await ensurePanel(guild, 'status', 'status', { embeds: [embeds.statusEmbed(status)] });
+    duplicates += await ensurePanel(guild, 'partnersAdmin', 'partnersAdmin', embeds.partnersAdminPanel());
+    duplicates += (await invites.refreshBoard(guild)) ?? 0;
+    duplicates += (await boosts.refreshBoard(guild)) ?? 0;
+
+    // Messages système Discord (boosts) → #logs (staff) : ils déclenchent la récompense,
+    // et c'est le bot qui remercie publiquement dans #boosters (pas de doublon visible).
+    // Les messages d'arrivée Discord sont coupés : #bienvenue s'en charge déjà.
+    const logs = getChannel(guild, 'logs');
+    if (logs) {
+      await guild.edit({
+        systemChannel: logs.id,
+        systemChannelFlags: [
+          GuildSystemChannelFlags.SuppressJoinNotifications,
+          GuildSystemChannelFlags.SuppressJoinNotificationReplies,
+          GuildSystemChannelFlags.SuppressGuildReminderNotifications,
+        ],
+        reason: '/setup',
+      }).catch((err) => console.error('[setup] salon système :', err.message));
+    }
     db.save();
 
     // 4. Rôle Non vérifié pour les membres qui n'ont pas encore le rôle Membre

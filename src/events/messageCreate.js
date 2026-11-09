@@ -5,6 +5,7 @@ const { isStaff } = require('../utils/helpers');
 const { addWarn } = require('../utils/sanctions');
 const { modAction, notifyUser } = require('../utils/modlog');
 const { formatDuration } = require('../utils/helpers');
+const boosts = require('../utils/boosts');
 
 const INVITE_RE = /(?:discord(?:app)?\.com\/invite|discord\.(?:gg|io|me|li)|dsc\.gg)\/[\w-]+/i;
 const recent = new Map(); // userId → timestamps des derniers messages
@@ -47,7 +48,10 @@ module.exports = {
   name: Events.MessageCreate,
   detect, // exporté pour les tests
   async execute(message, client) {
-    if (!config.autoMod.enabled || !message.inGuild() || message.author.bot || !message.member) return;
+    if (!message.inGuild()) return;
+    // Message système « X a boosté le serveur » (un par boost acheté)
+    if (boosts.BOOST_TYPES.has(message.type)) return boosts.onBoostMessage(message);
+    if (!config.autoMod.enabled || message.author.bot || !message.member) return;
     if (isStaff(message.member) || message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return;
 
     const hit = detect(message);

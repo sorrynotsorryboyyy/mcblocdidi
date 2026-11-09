@@ -30,6 +30,7 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,    // intent privilégié : SERVER MEMBERS INTENT
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,  // intent privilégié : MESSAGE CONTENT INTENT (auto-mod)
+    GatewayIntentBits.GuildInvites,    // suivi des invitations (parrainage)
   ],
   partials: [Partials.GuildMember],
 });
@@ -49,10 +50,14 @@ for (const file of fs.readdirSync(eventsDir).filter((f) => f.endsWith('.js'))) {
 
 process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
 
+// ---------- API du pont Minecraft (récompenses, liaison de compte) ----------
+const api = require('./api/server').start(client);
+
 // ---------- Arrêt propre (Railway envoie SIGTERM à chaque redéploiement) ----------
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, async () => {
     console.log(`👋 ${signal} reçu, arrêt du bot...`);
+    api.close();
     await client.destroy().catch(() => null);
     process.exitCode = 0;
     setTimeout(() => process.exit(0), 1000).unref();
@@ -67,5 +72,8 @@ client.login(token).catch((err) => {
   } else {
     console.error(err);
   }
+  // Arrêt réel (l'API HTTP garderait sinon le processus en vie) : Railway redémarre le bot
   process.exitCode = 1;
+  api.close();
+  setTimeout(() => process.exit(1), 500).unref();
 });

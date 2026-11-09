@@ -1,5 +1,6 @@
 const { getRole, replyEphemeral } = require('../utils/helpers');
 const { success, error } = require('../utils/embeds');
+const invites = require('../utils/invites');
 
 module.exports = {
   prefixes: ['verify_accept'],
@@ -15,6 +16,7 @@ module.exports = {
 
     await member.roles.add(memberRole, 'Règlement accepté');
     if (unverified && member.roles.cache.has(unverified.id)) await member.roles.remove(unverified).catch(() => null);
+    invites.onVerified(member); // condition de validation du parrainage
 
     return replyEphemeral(interaction, {
       embeds: [success('Merci ! Tu as maintenant accès à tout le serveur. Bon jeu ! 🎮')],

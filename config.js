@@ -47,6 +47,31 @@ module.exports = {
   announceOnline: true,
 
   // ------------------------------------------------------------
+  //  PARRAINAGE : récompense en jeu quand un membre invite quelqu'un
+  //  Conditions : compte Discord de l'invité > minAccountAgeDays, règlement accepté,
+  //  et toujours présent après holdDays jours. Une seule récompense par invité, à vie.
+  // ------------------------------------------------------------
+  invites: {
+    enabled: true,
+    rewardCoins: Number(process.env.INVITE_REWARD) || 500,
+    minAccountAgeDays: 7,
+    holdDays: 3,
+  },
+
+  // ------------------------------------------------------------
+  //  BOOSTS : chaque boost acheté = X mois de VIP en jeu (cumulable)
+  //  + rôle 💎 VIP sur Discord tant que le membre booste
+  // ------------------------------------------------------------
+  boosts: {
+    enabled: true,
+    vipMonthsPerBoost: 1,
+    vipRank: 'vip', // id du grade dans mcblocManager
+  },
+
+  // Liaison Discord ↔ Minecraft (/lier) : durée de validité d'un code
+  linkCodeMinutes: 10,
+
+  // ------------------------------------------------------------
   //  AUTO-MODÉRATION (le staff n'est jamais concerné)
   // ------------------------------------------------------------
   autoMod: {
@@ -199,6 +224,8 @@ module.exports = {
         { key: 'media', name: '📸┃médias', access: 'public', topic: 'Screens, vidéos, clips' },
         { key: 'suggestions', name: '💡┃suggestions', access: 'readonly', topic: 'Propose tes idées avec /suggestion' },
         { key: 'botCommands', name: '🤖┃commandes-bot', access: 'public' },
+        { key: 'invites', name: '📨┃invitations', access: 'readonly', topic: 'Invite tes amis et gagne des pièces en jeu ! (/lier puis /invitations)' },
+        { key: 'boosters', name: '🚀┃boosters', access: 'readonly', topic: 'Merci à nos boosters ! 1 boost = 1 mois de VIP en jeu' },
       ],
     },
     {
