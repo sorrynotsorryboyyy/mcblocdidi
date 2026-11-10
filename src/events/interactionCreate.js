@@ -16,7 +16,11 @@ for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.js'))) {
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
-    if (!interaction.inGuild()) return;
+    // En MP, seuls les handlers marqués allowDM répondent (ex. note de ticket)
+    if (!interaction.inGuild()) {
+      const h = interaction.isButton() ? handlers.get(interaction.customId.split(':')[0]) : null;
+      if (!h?.allowDM) return;
+    }
 
     try {
       if (interaction.isChatInputCommand()) {

@@ -251,6 +251,26 @@ function giveawayMessage(gw) {
 
 // ---------- Bienvenue / départ ----------
 
+/** Guide envoyé en MP à l'arrivée (une seule fois par membre). */
+function welcomeDm(member) {
+  const { guild } = member;
+  const ch = (key, fallback) => getChannel(guild, key) ?? fallback;
+  const links = Object.entries(config.links).filter(([, url]) => url).map(([k, url]) => `[${k[0].toUpperCase() + k.slice(1)}](${url})`);
+  return base()
+    .setTitle(`👋 Bienvenue sur ${config.serverName} !`)
+    .setThumbnail(guild.iconURL())
+    .setDescription(
+      `Salut **${member.user.username}** ! Voici comment bien démarrer :\n\n`
+      + `**1.** ✅ Accepte le règlement dans ${ch('verify', '#vérification')} (en indiquant ton âge)\n`
+      + `**2.** 🔗 Relie ton compte Minecraft : tape \`/lier\` sur le Discord, puis \`/lier <code>\` en jeu\n`
+      + `**3.** 🎭 Choisis tes notifications dans ${ch('roles', '#rôles')}\n`
+      + `**4.** 🎮 Connecte-toi sur \`${ip()}\` !\n\n`
+      + `🎁 **Bonus** : \`/daily\` chaque jour, et **${config.invites.rewardCoins} pièces** par ami invité (validé après ${config.invites.holdDays} jours).\n`
+      + `🎫 Besoin d'aide ? Ouvre un ticket dans ${ch('ticketPanel', '#ouvrir-un-ticket')}.`
+      + (links.length ? `\n\n🔗 ${links.join(' · ')}` : ''),
+    );
+}
+
 function welcomeEmbed(member) {
   const rules = getChannel(member.guild, 'rules');
   const verify = getChannel(member.guild, 'verify');
@@ -306,6 +326,6 @@ function tournamentMessage(t, guild) {
 module.exports = {
   base, success, error, ip,
   rulesPanel, verifyPanel, infoPanel, statusEmbed, rolesPanel, ticketPanel,
-  welcomeEmbed, leaveEmbed, tournamentMessage, suggestionMessage, giveawayMessage,
+  welcomeEmbed, welcomeDm, leaveEmbed, tournamentMessage, suggestionMessage, giveawayMessage,
   partnerMessage, partnersAdminPanel,
 };

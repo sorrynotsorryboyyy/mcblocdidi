@@ -6,6 +6,7 @@ const { addWarn } = require('../utils/sanctions');
 const { modAction, notifyUser } = require('../utils/modlog');
 const { formatDuration } = require('../utils/helpers');
 const boosts = require('../utils/boosts');
+const levels = require('../utils/levels');
 
 const INVITE_RE = /(?:discord(?:app)?\.com\/invite|discord\.(?:gg|io|me|li)|dsc\.gg)\/[\w-]+/i;
 const recent = new Map(); // userId → timestamps des derniers messages
@@ -51,11 +52,12 @@ module.exports = {
     if (!message.inGuild()) return;
     // Message système « X a boosté le serveur » (un par boost acheté)
     if (boosts.BOOST_TYPES.has(message.type)) return boosts.onBoostMessage(message);
-    if (!config.autoMod.enabled || message.author.bot || !message.member) return;
-    if (isStaff(message.member) || message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return;
+    if (message.author.bot || !message.member) return;
 
-    const hit = detect(message);
-    if (!hit) return;
+    const exempt = isStaff(message.member) || message.member.permissions.has(PermissionFlagsBits.ManageMessages);
+    const hit = config.autoMod.enabled && !exempt ? detect(message) : null;
+    // XP uniquement pour les messages qui n'ont pas été sanctionnés
+    if (!hit) return levels.onMessage(message);
     const { guild, member } = message;
 
     if (hit.type === 'invite') {

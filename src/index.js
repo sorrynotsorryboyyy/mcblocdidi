@@ -31,6 +31,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,  // intent privilégié : MESSAGE CONTENT INTENT (auto-mod)
     GatewayIntentBits.GuildInvites,    // suivi des invitations (parrainage)
+    GatewayIntentBits.GuildVoiceStates, // XP en vocal (niveaux)
   ],
   partials: [Partials.GuildMember],
 });
@@ -58,6 +59,7 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, async () => {
     console.log(`👋 ${signal} reçu, arrêt du bot...`);
     api.close();
+    require('./utils/db').flush(); // écrit l'XP en attente avant de quitter
     await client.destroy().catch(() => null);
     process.exitCode = 0;
     setTimeout(() => process.exit(0), 1000).unref();

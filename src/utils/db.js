@@ -23,7 +23,11 @@ const DEFAULTS = () => ({
   links: {},        // discordId → { uuid, name, linkedAt }
   linkCodes: {},    // code → { discordId, expiresAt }
   rewards: {},      // id → { discordId, type, amount|months, label, status, tries, createdAt }
-  state: {},        // divers (ex. mcOnline)
+  levels: {},       // userId → { xp, level, lastMsg, voiceMinutes, tier }
+  daily: {},        // userId → { last: 'AAAA-MM-JJ', streak }
+  polls: {},        // id → { question, choices, votes: {userId: n}, endsAt, ended, ... }
+  ticketMeta: {},   // channelId → { ownerId, type, openedAt, claimedBy, closedAt, rating }
+  state: {},        // divers (ex. mcOnline, launch, lockdown, leaderboards)
 });
 
 function load() {
@@ -45,15 +49,33 @@ let data;
 try {
   data = load();
 } catch (err) {
-  console.error(`⚠️ Impossible de lire ${FILE} (${err.message}). Démarrage avec une base vide.`);
+  // Fichier illisible : on le met de côté AVANT de repartir à vide (sinon il serait écrasé).
+  const aside = `${FILE}.corrompu-${Date.now()}`;
+  try { fs.renameSync(FILE, aside); } catch {}
+  console.error(`⚠️ ${FILE} illisible (${err.message}). Copie conservée : ${aside}. `
+    + 'Restaure une sauvegarde de backups/ si besoin. Démarrage avec une base vide.');
   data = {};
 }
 
+let saveTimer = null;
+
 function save() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   fs.mkdirSync(DIR, { recursive: true });
   const tmp = `${FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
   fs.renameSync(tmp, FILE);
+}
+
+/** Sauvegarde groupée (5 s) pour les écritures fréquentes (XP des messages). */
+function saveSoon() {
+  saveTimer ??= setTimeout(() => { saveTimer = null; save(); }, 5000);
+  saveTimer.unref?.();
+}
+
+/** À appeler à l'arrêt : écrit immédiatement une sauvegarde en attente. */
+function flush() {
+  if (saveTimer) save();
 }
 
 /** Renvoie (et crée si besoin) les données d'un serveur. Modifie l'objet puis appelle save(). */
@@ -68,4 +90,4 @@ function guildIds() {
   return Object.keys(data);
 }
 
-module.exports = { guild, guildIds, save, FILE };
+module.exports = { guild, guildIds, save, saveSoon, flush, FILE, DIR };

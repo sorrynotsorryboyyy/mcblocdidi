@@ -99,6 +99,25 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 - `/embed mention:@rôle` : publie un embed en mentionnant un rôle (ex. 🆕 Mises à jour).
 - **#👀┃spoilers** (MINI-JEUX) : avant-premières, seul le staff publie.
 
+## 🚀 Pack lancement
+
+| Fonction | Utilisation |
+|---|---|
+| **Compte à rebours** | `/lancement creer date:20/12/2026 18:00` → embed dans #annonces + bouton « Je serai là ! » (rôle 🚀 Pionnier). À l'heure H : annonce + **1000 pièces** en jeu par pionnier lié. `/lancement statut`, `ouvrir`, `annuler`. |
+| **Patch notes** | `/patchnote` → formulaire → #annonces avec mention 🆕 Mises à jour |
+| **Guide en MP** | envoyé automatiquement à chaque nouveau membre (une seule fois) |
+| **Compte lié** | après `/lier` : rôle 🔗 Compte lié + surnom = pseudo Minecraft |
+| **Niveaux** | XP en écrivant (1×/min) et en vocal (≥ 2 personnes). Paliers 5/10/20/35 → rôles 🌱 🔥 ⚡ 👑 + pièces. `/niveau`, `/top` |
+| **Classements** | #classements : top 10 Piggy Wars / SumoGames / CoreWars (envoyés par le proxy toutes les 5 min) + 🏅 Top Discord |
+| **/daily** | 100 pièces/jour (compte lié), +20 %/jour de série (max +100 %) |
+| **/sondage** | `question`, `choix:Oui | Non | Peut-être`, `duree:1h`, résultats en direct |
+| **Anti-raid** | ≥ 10 arrivées en 30 s → invitations en pause + vérification élevée + alerte staff, 15 min. `/lockdown on/off/statut` |
+| **Sanctions en jeu** | bans/mutes/kicks/warns du jeu → #🔨┃sanctions-en-jeu |
+| **Tickets** | bouton ✋ Prendre en charge, note ⭐ en MP à la fermeture, `/tickets stats` |
+| **Surveillance** | alerte dans #logs si le pont Minecraft se tait 5 min ; sauvegarde quotidienne (4 h) dans #logs ; `/backup` |
+
+Tous les montants et seuils se règlent dans `config.js` (`launch`, `levels`, `daily`, `antiRaid`, `backup`).
+
 ## 📋 Commandes
 
 | Commande | Description | Qui |

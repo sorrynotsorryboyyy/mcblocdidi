@@ -5,6 +5,8 @@
 //   GET  /api/rewards/pending       → { rewards: [...] }
 //   POST /api/rewards/:id/ack       ← { ok: boolean, message?: string }
 //   POST /api/link                  ← { code, uuid, name } → { ok, discord? , error? }
+//   POST /api/leaderboards          ← { games: [{ server, boards: [{ key, title, entries: [{ uuid, name, value }] }] }] }
+//   POST /api/sanctions             ← { action: 'create'|'revoke', id?, type, target: {uuid, name}, reason, staff, expiresAt, server }
 //
 // Authentification : en-tête "Authorization: Bearer <BRIDGE_SECRET>".
 const http = require('node:http');
@@ -14,8 +16,12 @@ const { pendingForBridge, acknowledge } = require('../utils/rewards');
 const { redeemCode } = require('../utils/links');
 const { base } = require('../utils/embeds');
 const { sendLog } = require('../utils/logger');
+const monitor = require('../utils/monitor');
+const leaderboards = require('../utils/leaderboards');
+const gameSanctions = require('../utils/gameSanctions');
+const linkedRole = require('../utils/linkedRole');
 
-const MAX_BODY = 10 * 1024;
+const MAX_BODY = 64 * 1024; // classements : ~10 Ko
 
 function send(res, status, body) {
   const json = JSON.stringify(body);
@@ -54,6 +60,21 @@ function createServer(client, secret) {
       if (!url.pathname.startsWith('/api/')) return send(res, 404, { error: 'not-found' });
       if (!secret) return send(res, 503, { error: 'bridge-disabled' });
       if (!authorized(req, secret)) return send(res, 401, { error: 'unauthorized' });
+      monitor.markSeen(); // le proxy est vivant
+
+      if (req.method === 'POST' && url.pathname === '/api/leaderboards') {
+        const body = await readJson(req);
+        const stored = leaderboards.store(body);
+        // Mise à jour des panneaux en arrière-plan (le proxy n'attend pas Discord)
+        for (const guild of client.guilds.cache.values()) leaderboards.refreshPanels(guild).catch(() => null);
+        return send(res, 200, { ok: true, games: stored });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/sanctions') {
+        const body = await readJson(req);
+        const posted = await gameSanctions.handle(client, body);
+        return send(res, 200, { ok: true, posted });
+      }
 
       if (req.method === 'GET' && url.pathname === '/api/rewards/pending') {
         return send(res, 200, { rewards: pendingForBridge() });
@@ -72,6 +93,7 @@ function createServer(client, secret) {
         if (!result.ok) return send(res, 200, result);
         const user = await client.users.fetch(result.discordId).catch(() => null);
         const guild = client.guilds.cache.get(result.guildId);
+        if (guild) await linkedRole.apply(guild, result.discordId, body.name);
         await user?.send({ embeds: [base(config.colors.success).setDescription(
           `🔗 Ton compte Discord est maintenant lié au compte Minecraft **${body.name}** ! Tes récompenses en attente arrivent en jeu.`,
         )] }).catch(() => null);

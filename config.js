@@ -75,6 +75,54 @@ module.exports = {
 
   // Liaison Discord ↔ Minecraft (/lier) : durée de validité d'un code
   linkCodeMinutes: 10,
+  // Après /lier : rôle 🔗 Compte lié + surnom Discord = pseudo Minecraft
+  linkSetsNickname: true,
+
+  // ------------------------------------------------------------
+  //  LANCEMENT : /lancement creer → compte à rebours + bouton « Je serai là ! »
+  //  Les 🚀 Pionniers reçoivent des pièces en jeu à l'ouverture (compte lié requis)
+  // ------------------------------------------------------------
+  launch: {
+    pioneerCoins: 1000,
+  },
+
+  // ------------------------------------------------------------
+  //  NIVEAUX DISCORD : XP en écrivant / en vocal → rôles + pièces aux paliers
+  // ------------------------------------------------------------
+  levels: {
+    enabled: true,
+    messageXp: [15, 25],       // XP aléatoire par message (min, max)
+    messageCooldownSec: 60,    // 1 message compté par minute maximum
+    minMessageLength: 3,
+    voiceXpPerMinute: 10,      // seulement à 2 humains minimum, ni muet ni sourd
+    // Paliers : rôle (clé de `roles`) + pièces en jeu, donnés une seule fois
+    tiers: [
+      { level: 5, role: 'level5', coins: 200 },
+      { level: 10, role: 'level10', coins: 500 },
+      { level: 20, role: 'level20', coins: 1000 },
+      { level: 35, role: 'level35', coins: 2500 },
+    ],
+  },
+
+  // /daily : pièces en jeu chaque jour (compte lié requis), bonus de série
+  daily: {
+    baseCoins: 100,
+    streakBonusPercent: 20,   // +20 % par jour consécutif…
+    maxBonusPercent: 100,     // …plafonné à +100 %
+    timezone: 'Europe/Paris',
+  },
+
+  // ANTI-RAID : trop d'arrivées d'un coup → invitations en pause + vérification renforcée
+  antiRaid: {
+    enabled: true,
+    joins: 10,
+    windowSeconds: 30,
+    lockMinutes: 15,
+  },
+
+  // Sauvegarde quotidienne de la base (heure de Paris) + alerte si le pont Minecraft se tait
+  backup: { hour: 4, keep: 7 },
+  bridgeAlertMinutes: 5,
 
   // ------------------------------------------------------------
   //  AUTO-MODÉRATION (le staff n'est jamais concerné)
@@ -142,20 +190,21 @@ module.exports = {
   // ------------------------------------------------------------
   //  MINI-JEUX : un salon + un rôle de notif sont créés pour chacun
   //  (max 20). `id` = nom du salon, en minuscules sans espaces.
+  //  `server` : nom du serveur BungeeCord (classements envoyés par le proxy).
   //  `formerIds` : anciens ids → le salon et le rôle existants sont RENOMMÉS
   //  (messages conservés) au lieu d'être supprimés puis recréés.
   // ------------------------------------------------------------
   minigames: [
     {
-      id: 'piggy-wars', name: 'Piggy Wars', emoji: '🐷',
+      id: 'piggy-wars', name: 'Piggy Wars', emoji: '🐷', server: 'piggywars',
       description: '3vs3 — lance des cochons sur tes adversaires pour les éliminer ou les pousser dans le vide !',
     },
     {
-      id: 'sumogames', name: 'SumoGames', emoji: '🤼', formerIds: ['sumo-tower'],
+      id: 'sumogames', name: 'SumoGames', emoji: '🤼', formerIds: ['sumo-tower'], server: 'sumotower',
       description: 'Sumo classique avec des classes et du loot façon Survival Games — sois le dernier sur le ring !',
     },
     {
-      id: 'corewars', name: 'CoreWars', emoji: '🔮', formerIds: ['fallen-clan'],
+      id: 'corewars', name: 'CoreWars', emoji: '🔮', formerIds: ['fallen-clan'], server: 'corewars',
       description: '10vs10 — détruis le cœur de la base ennemie et protège le tien !',
     },
   ],
@@ -188,6 +237,13 @@ module.exports = {
     support: { name: '🎫 Support', color: 0x1abc9c, hoist: true, permissions: ['ManageMessages'] },
     vip: { name: '💎 VIP', color: 0xf1c40f, hoist: true, permissions: [] },
     partner: { name: '🤝 Partenaire', color: 0x9b59b6, hoist: true, permissions: [] },
+    // Paliers de niveau Discord (voir `levels.tiers`)
+    level35: { name: '👑 Légende', color: 0xe91e63, hoist: true, permissions: [] },
+    level20: { name: '⚡ Vétéran', color: 0x9b59b6, hoist: false, permissions: [] },
+    level10: { name: '🔥 Habitué', color: 0xe67e22, hoist: false, permissions: [] },
+    level5: { name: '🌱 Actif', color: 0x2ecc71, hoist: false, permissions: [] },
+    pioneer: { name: '🚀 Pionnier', color: 0x3498db, hoist: false, permissions: [] },
+    linked: { name: '🔗 Compte lié', color: 0x000000, hoist: false, permissions: [] },
     member: { name: '✅ Membre', color: 0x95a5a6, hoist: false, permissions: [] },
     unverified: { name: '🔒 Non vérifié', color: 0x546e7a, hoist: false, permissions: [] },
     // Âge : choisi à la vérification (boutons) ou dans #rôles (menu « Ton âge »)
@@ -284,6 +340,7 @@ module.exports = {
         { key: 'logs', name: '📋┃logs', access: 'staff' },
         { key: 'partnersAdmin', name: '🤝┃gestion-partenaires', access: 'staff', topic: 'Ajouter / modifier / retirer un partenaire' },
         { key: 'discordUpdates', name: '📣┃discord-updates', access: 'staff', topic: 'Messages officiels de Discord (Communauté)' },
+        { key: 'gameSanctions', name: '🔨┃sanctions-en-jeu', access: 'staff', topic: 'Sanctions appliquées en jeu (envoyées par le proxy)' },
       ],
     },
   ],

@@ -10,6 +10,14 @@ const { sendLog } = require('../utils/logger');
 
 const OWNER_RE = /ticket-owner:(\d+)/;
 
+/** 5 boutons ⭐ envoyés en MP à la fermeture (voir handlers/ticketRating.js). */
+function ratingRow(guildId, channelId) {
+  return new ActionRowBuilder().addComponents([1, 2, 3, 4, 5].map((n) => new ButtonBuilder()
+    .setCustomId(`ticket_rate:${guildId}:${channelId}:${n}`)
+    .setLabel('⭐'.repeat(n))
+    .setStyle(n >= 4 ? ButtonStyle.Success : n === 3 ? ButtonStyle.Secondary : ButtonStyle.Danger)));
+}
+
 function ownerOf(channel) {
   return channel.topic?.match(OWNER_RE)?.[1] ?? null;
 }
@@ -39,7 +47,7 @@ async function buildTranscript(channel) {
 
 module.exports = {
   // ticket_open = ancien bouton (avant la v2), gardé pour compatibilité
-  prefixes: ['ticket_open', 'ticket_type', 'ticket_modal', 'ticket_close', 'ticket_reopen', 'ticket_delete'],
+  prefixes: ['ticket_open', 'ticket_type', 'ticket_modal', 'ticket_close', 'ticket_claim', 'ticket_reopen', 'ticket_delete'],
 
   async handle(interaction, arg, prefix) {
     const { guild, member } = interaction;
@@ -112,15 +120,20 @@ module.exports = {
           ...answers.map((a) => ({ name: a.label.slice(0, 256), value: a.value.slice(0, 1024) })),
         );
       const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('ticket_claim').setLabel('Prendre en charge').setEmoji('✋').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('ticket_close').setLabel('Fermer le ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
       );
       const support = getRole(guild, 'support');
-      await channel.send({
+      const opening = await channel.send({
         content: `${member}${support ? ` ${support}` : ''}`,
         embeds: [embed],
         components: [row],
         allowedMentions: { users: [member.id], roles: support ? [support.id] : [] },
       });
+      g.ticketMeta[channel.id] = {
+        ownerId: member.id, type: type.id, openedAt: Date.now(), claimedBy: null, openMessageId: opening.id, rating: null,
+      };
+      db.save();
 
       await sendLog(guild, base(config.colors.info).setTitle(`🎫 Ticket ouvert — ${type.label}`)
         .addFields(
@@ -154,11 +167,46 @@ module.exports = {
       await channel.send({ embeds: [base(config.colors.warning).setDescription(`🔒 Ticket fermé par ${member}.`)], components: [row] });
       await sendLog(guild, base(config.colors.warning).setTitle('🔒 Ticket fermé')
         .addFields({ name: 'Salon', value: `${channel}`, inline: true }, { name: 'Par', value: `${member}`, inline: true }));
+
+      // Demande de note (une seule fois par ticket)
+      const meta = g.ticketMeta[channel.id];
+      if (meta && !meta.ratingAsked) {
+        meta.ratingAsked = true;
+        meta.closedAt = Date.now();
+        db.save();
+        const owner = await interaction.client.users.fetch(ownerId).catch(() => null);
+        await owner?.send({
+          embeds: [base(config.colors.info).setTitle('⭐ Ton avis compte !')
+            .setDescription(`Ton ticket **${channel.name}** sur ${guild.name} a été fermé.\nComment évalues-tu l'aide du staff ?`)],
+          components: [ratingRow(guild.id, channel.id)],
+        }).catch(() => null);
+      }
       return;
     }
 
-    // ---------- Rouvrir / Supprimer : staff uniquement ----------
+    // ---------- Staff uniquement : prendre en charge / rouvrir / supprimer ----------
     if (!isStaff(member)) return replyEphemeral(interaction, { embeds: [error('Réservé au staff.')] });
+
+    if (prefix === 'ticket_claim') {
+      const g = db.guild(guild.id);
+      const meta = g.ticketMeta[channel.id] ??= { ownerId, openedAt: channel.createdTimestamp, claimedBy: null };
+      if (meta.claimedBy) {
+        return replyEphemeral(interaction, { embeds: [error(`Ce ticket est déjà pris en charge par <@${meta.claimedBy}>.`)] });
+      }
+      meta.claimedBy = member.id;
+      meta.claimedAt = Date.now();
+      db.save();
+      // Bouton désactivé + nom du staff sur le message d'ouverture
+      const rows = interaction.message.components.map((r) => ActionRowBuilder.from(r));
+      for (const r of rows) {
+        for (const b of r.components) {
+          if (b.data.custom_id === 'ticket_claim') b.setDisabled(true).setLabel(`Pris en charge par ${member.displayName}`.slice(0, 80));
+        }
+      }
+      await interaction.update({ components: rows });
+      await channel.send({ embeds: [base(config.colors.success).setDescription(`✋ ${member} prend en charge ce ticket.`)] });
+      return;
+    }
 
     if (prefix === 'ticket_reopen') {
       const g = db.guild(guild.id);
@@ -169,6 +217,7 @@ module.exports = {
       await interaction.deferUpdate();
       await channel.permissionOverwrites.edit(ownerId, { ViewChannel: true, SendMessages: true }).catch(() => null);
       g.tickets[ownerId] = channel.id;
+      if (g.ticketMeta[channel.id]) g.ticketMeta[channel.id].closedAt = null;
       db.save();
       await interaction.message.edit({ components: [] }).catch(() => null);
       await channel.send({ content: `<@${ownerId}>`, embeds: [base(config.colors.success).setDescription(`🔓 Ticket rouvert par ${member}.`)] });
@@ -187,7 +236,9 @@ module.exports = {
         files: transcript ? [transcript] : [],
       });
       const g = db.guild(guild.id);
-      if (g.tickets[ownerId] === channel.id) { delete g.tickets[ownerId]; db.save(); }
+      if (g.tickets[ownerId] === channel.id) delete g.tickets[ownerId];
+      if (g.ticketMeta[channel.id]) g.ticketMeta[channel.id].closedAt ??= Date.now(); // gardé pour les stats
+      db.save();
       setTimeout(() => channel.delete('Ticket supprimé').catch(() => null), 5000);
     }
   },

@@ -13,6 +13,10 @@ const counters = require('../../utils/counters');
 const { ensurePanel } = require('../../utils/panels');
 const invites = require('../../utils/invites');
 const boosts = require('../../utils/boosts');
+const levels = require('../../utils/levels');
+const leaderboards = require('../../utils/leaderboards');
+const launch = require('../../utils/launch');
+const linkedRole = require('../../utils/linkedRole');
 
 // ---------- Rôles ----------
 async function ensureRole(guild, def, g) {
@@ -299,6 +303,10 @@ module.exports = {
     duplicates += await ensurePanel(guild, 'partnersAdmin', 'partnersAdmin', embeds.partnersAdminPanel());
     duplicates += (await invites.refreshBoard(guild)) ?? 0;
     duplicates += (await boosts.refreshBoard(guild)) ?? 0;
+    duplicates += (await levels.refreshBoard(guild, true)) ?? 0;
+    duplicates += (await launch.refreshPanel(guild).catch(() => 0)) ?? 0;
+    await leaderboards.refreshPanels(guild, true);
+    const relinked = await linkedRole.repairAll(guild);
 
     // Messages système Discord (boosts) → #logs (staff) : ils déclenchent la récompense,
     // et c'est le bot qui remercie publiquement dans #boosters (pas de doublon visible).
@@ -336,6 +344,7 @@ module.exports = {
         + '👉 Pense à t\'attribuer le rôle 👑 Fondateur.\n'
         + '👉 Tu peux relancer `/setup` à tout moment après avoir modifié `config.js`.',
       );
+    if (relinked) summary.addFields({ name: '🔗 Comptes liés', value: `Rôle et surnom vérifiés pour **${relinked}** membre(s).` });
     summary.addFields({
       name: '🌐 Communauté Discord',
       value: community.ok
