@@ -9,7 +9,7 @@ const { colors } = config;
 const ip = () => (config.minecraft.port === 25565 ? config.minecraft.host : `${config.minecraft.host}:${config.minecraft.port}`);
 
 function base(color = colors.primary) {
-  return new EmbedBuilder().setColor(color).setFooter({ text: config.serverName }).setTimestamp();
+  return new EmbedBuilder().setColor(color).setFooter({ text: config.footer }).setTimestamp();
 }
 
 const success = (desc) => base(colors.success).setDescription(`✅ ${desc}`);
@@ -37,10 +37,12 @@ function verifyPanel(guild) {
     .setDescription(
       `Bienvenue sur **${config.serverName}** !\n\n`
       + `1️⃣ Lis le règlement${rules ? ` dans ${rules}` : ''}.\n`
-      + '2️⃣ Clique sur le bouton ci-dessous pour l\'accepter et accéder au serveur.',
+      + '2️⃣ Accepte-le en indiquant ton âge avec l\'un des boutons ci-dessous.\n\n'
+      + '> 🔒 Ton âge sert uniquement à adapter les salons et les événements. Tu pourras le modifier dans #rôles.',
     );
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('verify_accept').setLabel('J\'accepte le règlement').setEmoji('✅').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('verify_accept:minor').setLabel('J\'accepte — j\'ai moins de 18 ans').setEmoji('🧒').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('verify_accept:adult').setLabel('J\'accepte — j\'ai 18 ans ou plus').setEmoji('🧑').setStyle(ButtonStyle.Success),
   );
   return { embeds: [embed], components: [row] };
 }
@@ -55,7 +57,7 @@ function infoPanel(guild) {
       { name: '☕ Édition', value: 'Java', inline: true },
       {
         name: '🎮 Mini-jeux',
-        value: config.minigames.map((g) => `${g.emoji} **${g.name}**`).join('\n') || '—',
+        value: config.minigames.map((g) => `${g.emoji} **${g.name}** — ${g.description}`).join('\n').slice(0, 1024) || '—',
         inline: false,
       },
     )
@@ -90,31 +92,45 @@ function statusEmbed(s) {
   return embed;
 }
 
+/** Option de menu à partir d'une définition de rôle (« 🔔 Annonces » → emoji 🔔, libellé Annonces). */
+function roleOption(d) {
+  return {
+    label: d.name.replace(/^\S+\s/, ''),
+    value: d.key,
+    description: d.description?.slice(0, 100),
+    emoji: d.name.split(' ')[0],
+  };
+}
+
 function rolesPanel(guild) {
-  const options = allRoleDefs()
-    .filter((d) => d.selfAssign && getRole(guild, d.key))
-    .slice(0, 25)
-    .map((d) => ({
-      label: d.name.replace(/^\S+\s/, ''), // retire l'emoji du label
-      value: d.key,
-      description: d.description?.slice(0, 100),
-      emoji: d.name.split(' ')[0],
-    }));
+  const defs = allRoleDefs().filter((d) => getRole(guild, d.key));
+  const options = defs.filter((d) => d.selfAssign).slice(0, 25).map(roleOption);
+  const ageOptions = defs.filter((d) => d.age).map(roleOption);
 
   const embed = base(colors.info)
     .setTitle('🎭 Choisis tes rôles')
     .setDescription(
-      'Sélectionne un rôle dans le menu pour **l\'ajouter**, sélectionne-le à nouveau pour **le retirer**.\n\n'
-      + options.map((o) => `${o.emoji} **${o.label}** — ${o.description ?? ''}`).join('\n'),
+      '🔔 **Notifications** — sélectionne un rôle pour **l\'ajouter**, sélectionne-le à nouveau pour **le retirer**.\n\n'
+      + options.map((o) => `${o.emoji} **${o.label}** — ${o.description ?? ''}`).join('\n')
+      + (ageOptions.length ? '\n\n🎂 **Ton âge** — choisis ta tranche d\'âge dans le second menu.' : ''),
     );
-  const components = options.length ? [new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
+  const components = [];
+  if (options.length) {
+    components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
       .setCustomId('roles_select')
-      .setPlaceholder('Clique ici pour choisir tes rôles')
+      .setPlaceholder('🔔 Choisis tes notifications')
       .setMinValues(1)
       .setMaxValues(options.length)
-      .addOptions(options),
-  )] : [];
+      .addOptions(options)));
+  }
+  if (ageOptions.length) {
+    components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+      .setCustomId('age_select')
+      .setPlaceholder('🎂 Ton âge')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(ageOptions)));
+  }
   return { embeds: [embed], components };
 }
 
@@ -224,7 +240,7 @@ function giveawayMessage(gw) {
       { name: '👥 Participants', value: String(gw.participants.length), inline: true },
       { name: '🎙️ Organisé par', value: `<@${gw.hostId}>`, inline: true },
     )
-    .setFooter({ text: `${config.serverName} • ID : ${gw.id}` });
+    .setFooter({ text: `${config.footer} • ID : ${gw.id}` });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`gw_join:${gw.id}`).setEmoji('🎉')

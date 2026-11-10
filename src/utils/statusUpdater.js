@@ -58,8 +58,9 @@ async function announceTransition(guild, s) {
   if (!(prev === false && next === true) || !config.announceOnline) return;
   const channel = getChannel(guild, 'announcements');
   if (!channel) return;
-  const role = getRole(guild, 'notifAnnonces');
-  await channel.send({
+  // Rôle dédié 🛠️ Statut serveur (repli sur 🔔 Annonces si /setup n'a pas encore été relancé)
+  const role = getRole(guild, 'notifStatus') ?? getRole(guild, 'notifAnnonces');
+  const sent = await channel.send({
     content: role ? `${role}` : undefined,
     embeds: [base(config.colors.success)
       .setTitle('🟢 Le serveur est de nouveau en ligne !')
@@ -70,6 +71,8 @@ async function announceTransition(guild, s) {
       )],
     allowedMentions: { roles: role ? [role.id] : [] },
   }).catch(() => null);
+  // Salon d'annonces (Communauté) : publication auto vers les serveurs qui le suivent
+  if (sent?.crosspostable) await sent.crosspost().catch(() => null);
 }
 
 async function updateAll(client) {

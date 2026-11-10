@@ -101,11 +101,24 @@ function gameChoices() {
   return config.minigames.slice(0, 25).map((g) => ({ name: `${g.emoji} ${g.name}`, value: g.id }));
 }
 
+/** Mini-jeu par id (accepte aussi un ancien id, ex. « sumo-tower » → SumoGames). */
 function findGame(id) {
-  return config.minigames.find((g) => g.id === id) ?? null;
+  return config.minigames.find((g) => g.id === id || g.formerIds?.includes(id)) ?? null;
+}
+
+/** Donne un rôle d'âge (clé config, ex. 'ageAdult') et retire les autres rôles d'âge. */
+async function setAgeRole(member, ageKey) {
+  const ageKeys = Object.entries(config.roles).filter(([, d]) => d.age).map(([k]) => k);
+  if (!ageKeys.includes(ageKey)) return false;
+  const target = getRole(member.guild, ageKey);
+  if (!target) return false;
+  const others = ageKeys.filter((k) => k !== ageKey).map((k) => getRole(member.guild, k)).filter((r) => r && member.roles.cache.has(r.id));
+  if (others.length) await member.roles.remove(others, 'Changement d\'âge');
+  if (!member.roles.cache.has(target.id)) await member.roles.add(target, 'Âge indiqué');
+  return true;
 }
 
 module.exports = {
   allRoleDefs, getChannel, getRole, staffRoleIds, isStaff, replyEphemeral,
-  parseDuration, formatDuration, checkHierarchy, gameChoices, findGame,
+  parseDuration, formatDuration, checkHierarchy, gameChoices, findGame, setAgeRole,
 };

@@ -1,14 +1,23 @@
 // Menu de sélection des rôles : sélectionner un rôle l'ajoute ou le retire (bascule).
 const { MessageFlags } = require('discord.js');
-const { allRoleDefs, getRole } = require('../utils/helpers');
-const { base, error } = require('../utils/embeds');
+const { allRoleDefs, getRole, setAgeRole } = require('../utils/helpers');
+const { base, error, success } = require('../utils/embeds');
 const config = require('../../config');
 
 module.exports = {
-  prefixes: ['roles_select'],
-  async handle(interaction) {
+  prefixes: ['roles_select', 'age_select'],
+  async handle(interaction, _arg, prefix) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const member = interaction.member;
+
+    // Menu « Ton âge » : choix unique, remplace l'ancien rôle d'âge
+    if (prefix === 'age_select') {
+      const key = interaction.values[0];
+      const ok = await setAgeRole(member, key);
+      await interaction.message.edit({ components: interaction.message.components }).catch(() => null);
+      if (!ok) return interaction.editReply({ embeds: [error('Rôle d\'âge introuvable. Un admin doit relancer `/setup`.')] });
+      return interaction.editReply({ embeds: [success(`Ton âge est enregistré : ${getRole(interaction.guild, key)}.`)] });
+    }
     const allowed = new Set(allRoleDefs().filter((d) => d.selfAssign).map((d) => d.key));
 
     const added = [];

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
 const db = require('../../utils/db');
 const { giveawayMessage, success, error } = require('../../utils/embeds');
-const { isStaff, replyEphemeral, parseDuration } = require('../../utils/helpers');
+const { isStaff, replyEphemeral, parseDuration, getRole } = require('../../utils/helpers');
 const { endGiveaway } = require('../../utils/giveaways');
 
 const MAX_MS = 30 * 864e5;
@@ -53,7 +53,12 @@ module.exports = {
         ended: false,
         channelId: channel.id,
       };
-      const msg = await channel.send(giveawayMessage(gw));
+      const ping = getRole(interaction.guild, 'notifGiveaways');
+      const msg = await channel.send({
+        ...giveawayMessage(gw),
+        content: ping ? `${ping}` : undefined,
+        allowedMentions: { roles: ping ? [ping.id] : [] },
+      });
       gw.messageId = msg.id;
       g.giveaways[gw.id] = gw;
       db.save();

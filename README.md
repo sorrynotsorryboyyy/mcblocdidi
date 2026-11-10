@@ -1,4 +1,4 @@
-# 🎮 Bot Discord — McBlocDidi (réseau Minecraft mini-jeux)
+# 🎮 Bot Discord — MCBLOC (réseau Minecraft mini-jeux)
 
 Bot Discord (discord.js v14) qui **configure tout le serveur en une commande** et le relie au réseau Minecraft :
 statut en direct, vérification, rôles, tickets, modération + auto-mod, suggestions, giveaways, tournois, LFG,
@@ -90,6 +90,14 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 `/setup` est relançable sans risque : rien n'est dupliqué, les salons renommés sont retrouvés, les doublons vides supprimés.
 
 ---
+
+## 🌐 Communauté Discord, âge et rôles
+
+-  **active la Communauté** : niveau de vérification ≥ faible, filtre de contenu pour tous, notifications « mentions seulement », #règles comme salon des règles, **#📣┃discord-updates** (staff) pour les messages de Discord. **#📢┃annonces** devient un salon d'annonces suivable (les annonces du bot sont publiées automatiquement).
+- **Âge** : dans #vérification, le membre accepte le règlement avec « -18 ans » ou « +18 ans ». Les membres déjà vérifiés choisissent leur âge dans #rôles (menu « Ton âge »).
+- **Notifications** (#rôles) : 🔔 Annonces, 🆕 Mises à jour, 🛠️ Statut serveur (redémarrage du serveur), 🏆 Tournois, 🎉 Events, 🎁 Giveaways (mentionné à chaque /giveaway), 📊 Sondages, + un rôle par mini-jeu.
+-  : publie un embed en mentionnant un rôle (ex. 🆕 Mises à jour).
+- **#👀┃spoilers** (MINI-JEUX) : avant-premières, seul le staff publie.
 
 ## 📋 Commandes
 

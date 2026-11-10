@@ -2,14 +2,19 @@
 //  CONFIGURATION DU BOT — modifie ce fichier selon ton serveur
 // ============================================================
 
+const SERVER_NAME = 'MCBLOC';
+// Les variables d'environnement MC_HOST / MC_PORT (Railway) sont prioritaires
+const MC_HOST = process.env.MC_HOST || 'play.mcbloc.fr';
+
 module.exports = {
-  // Nom affiché dans les embeds
-  serverName: 'McBlocDidi',
+  // Nom affiché dans les titres des embeds (ex. « Règlement de MCBLOC »)
+  serverName: SERVER_NAME,
+  // Pied de page de tous les embeds
+  footer: `${SERVER_NAME} • ${MC_HOST}`,
 
   // Serveur Minecraft (Java)
   minecraft: {
-    // Les variables d'environnement MC_HOST / MC_PORT (Railway) sont prioritaires
-    host: process.env.MC_HOST || 'play.mcbloc.fr',
+    host: MC_HOST,
     port: Number(process.env.MC_PORT) || 25565,
     version: '1.8 - 1.21',      // texte affiché dans /ip et #infos-serveur
   },
@@ -141,9 +146,18 @@ module.exports = {
   //  (messages conservés) au lieu d'être supprimés puis recréés.
   // ------------------------------------------------------------
   minigames: [
-    { id: 'piggy-wars', name: 'Piggy Wars', emoji: '🐷', description: 'Description à compléter.' },
-    { id: 'sumo-tower', name: 'Sumo Tower', emoji: '🗼', description: 'Description à compléter.' },
-    { id: 'corewars', name: 'CoreWars', emoji: '🔮', description: 'Description à compléter.', formerIds: ['fallen-clan'] },
+    {
+      id: 'piggy-wars', name: 'Piggy Wars', emoji: '🐷',
+      description: '3vs3 — lance des cochons sur tes adversaires pour les éliminer ou les pousser dans le vide !',
+    },
+    {
+      id: 'sumogames', name: 'SumoGames', emoji: '🤼', formerIds: ['sumo-tower'],
+      description: 'Sumo classique avec des classes et du loot façon Survival Games — sois le dernier sur le ring !',
+    },
+    {
+      id: 'corewars', name: 'CoreWars', emoji: '🔮', formerIds: ['fallen-clan'],
+      description: '10vs10 — détruis le cœur de la base ennemie et protège le tien !',
+    },
   ],
 
   // ------------------------------------------------------------
@@ -176,9 +190,17 @@ module.exports = {
     partner: { name: '🤝 Partenaire', color: 0x9b59b6, hoist: true, permissions: [] },
     member: { name: '✅ Membre', color: 0x95a5a6, hoist: false, permissions: [] },
     unverified: { name: '🔒 Non vérifié', color: 0x546e7a, hoist: false, permissions: [] },
+    // Âge : choisi à la vérification (boutons) ou dans #rôles (menu « Ton âge »)
+    ageMinor: { name: '🧒 -18 ans', color: 0x000000, hoist: false, permissions: [], age: true, description: 'J\'ai moins de 18 ans' },
+    ageAdult: { name: '🧑 +18 ans', color: 0x000000, hoist: false, permissions: [], age: true, description: 'J\'ai 18 ans ou plus' },
+    // Rôles de notifications (menu de #rôles)
     notifAnnonces: { name: '🔔 Annonces', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des annonces' },
+    notifUpdates: { name: '🆕 Mises à jour', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Nouveautés et patch notes du serveur' },
+    notifStatus: { name: '🛠️ Statut serveur', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être prévenu quand le serveur redémarre' },
     notifTournois: { name: '🏆 Tournois', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des tournois' },
     notifEvents: { name: '🎉 Events', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des events' },
+    notifGiveaways: { name: '🎁 Giveaways', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des giveaways' },
+    notifPolls: { name: '📊 Sondages', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Donner ton avis dans les sondages' },
     // + un rôle par mini-jeu, généré automatiquement (clé game_<id>)
   },
 
@@ -203,7 +225,8 @@ module.exports = {
       key: 'catInfo', name: '📌 INFORMATIONS',
       channels: [
         { key: 'rules', name: '📜┃règles', access: 'rules', topic: 'Les règles du serveur' },
-        { key: 'announcements', name: '📢┃annonces', access: 'readonly', topic: 'Annonces officielles' },
+        // announcement: true → converti en salon d'annonces (suivable) une fois la Communauté activée
+        { key: 'announcements', name: '📢┃annonces', access: 'readonly', topic: 'Annonces officielles', announcement: true },
         { key: 'info', name: 'ℹ️┃infos-serveur', access: 'readonly', topic: 'IP, version et liens utiles' },
         { key: 'status', name: '📊┃statut-serveur', access: 'readonly', topic: 'Statut du serveur Minecraft en direct' },
         { key: 'roles', name: '🎭┃rôles', access: 'readonly', topic: 'Choisis tes rôles' },
@@ -235,6 +258,7 @@ module.exports = {
         { key: 'leaderboards', name: '🏅┃classements', access: 'readonly', topic: 'Classements et records' },
         { key: 'tournaments', name: '🏆┃tournois', access: 'readonly', topic: 'Inscriptions aux tournois' },
         { key: 'lfg', name: '🔎┃recherche-équipe', access: 'public', topic: 'Utilise /lfg pour trouver des joueurs' },
+        { key: 'spoilers', name: '👀┃spoilers', access: 'readonly', topic: 'Avant-premières : images et vidéos des mini-jeux et des maps' },
         { key: 'bugs', name: '🐛┃bugs', access: 'public', topic: 'Signale les bugs rencontrés en jeu' },
         // + un salon par mini-jeu (généré automatiquement)
       ],
@@ -259,6 +283,7 @@ module.exports = {
         { key: 'staff', name: '🛡️┃staff', access: 'staff' },
         { key: 'logs', name: '📋┃logs', access: 'staff' },
         { key: 'partnersAdmin', name: '🤝┃gestion-partenaires', access: 'staff', topic: 'Ajouter / modifier / retirer un partenaire' },
+        { key: 'discordUpdates', name: '📣┃discord-updates', access: 'staff', topic: 'Messages officiels de Discord (Communauté)' },
       ],
     },
   ],

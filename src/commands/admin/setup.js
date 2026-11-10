@@ -2,6 +2,7 @@
 // Relançable sans risque : ce qui existe déjà est réutilisé, rien n'est dupliqué.
 const {
   SlashCommandBuilder, PermissionFlagsBits: P, ChannelType, MessageFlags, GuildSystemChannelFlags,
+  GuildVerificationLevel, GuildExplicitContentFilter, GuildDefaultMessageNotifications, GuildFeature, Locale,
 } = require('discord.js');
 const config = require('../../../config');
 const db = require('../../utils/db');
@@ -105,9 +106,52 @@ async function isDisposable(channel) {
   return !!msgs && !msgs.some((m) => !m.author.bot);
 }
 
+/** Texte et annonces = même « type » (un #annonces converti doit être retrouvé, pas recréé). */
+const TEXT_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
+const sameType = (a, b) => a === b || (TEXT_TYPES.includes(a) && TEXT_TYPES.includes(b));
+
+/**
+ * Active la Communauté Discord : prérequis (vérification, filtre, notifications,
+ * #règles, salon des mises à jour Discord) puis la fonctionnalité COMMUNITY,
+ * et convertit les salons marqués `announcement: true` en salons d'annonces.
+ * @returns {Promise<{ok: boolean, error?: string, converted: string[]}>}
+ */
+async function enableCommunity(guild) {
+  const rules = getChannel(guild, 'rules');
+  const updates = getChannel(guild, 'discordUpdates');
+  const converted = [];
+  if (!rules || !updates) return { ok: false, error: 'salons #règles ou #discord-updates introuvables', converted };
+  try {
+    await guild.edit({
+      verificationLevel: Math.max(guild.verificationLevel, GuildVerificationLevel.Low),
+      explicitContentFilter: GuildExplicitContentFilter.AllMembers,
+      defaultMessageNotifications: GuildDefaultMessageNotifications.OnlyMentions,
+      rulesChannel: rules.id,
+      publicUpdatesChannel: updates.id,
+      preferredLocale: Locale.French,
+      reason: '/setup : prérequis Communauté',
+    });
+    if (!guild.features.includes(GuildFeature.Community)) {
+      await guild.edit({ features: [...guild.features, GuildFeature.Community], reason: '/setup : activation Communauté' });
+    }
+  } catch (err) {
+    return { ok: false, error: err.message, converted };
+  }
+  // Salons d'annonces (suivables par d'autres serveurs) — uniquement possible en Communauté
+  for (const ch of config.categories.flatMap((c) => c.channels).filter((c) => c.announcement)) {
+    const channel = getChannel(guild, ch.key);
+    if (channel?.type === ChannelType.GuildText) {
+      await channel.setType(ChannelType.GuildAnnouncement, '/setup : salon d\'annonces')
+        .then(() => converted.push(channel.name))
+        .catch((err) => console.error('[setup] conversion annonces :', err.message));
+    }
+  }
+  return { ok: true, converted };
+}
+
 async function ensureChannel(guild, g, { key, name, type, parent, overwrites, topic }) {
   const parentId = parent?.id ?? null;
-  const sameKind = (c) => c.type === type && (c.parentId ?? null) === parentId && coreName(c.name) === coreName(name);
+  const sameKind = (c) => sameType(c.type, type) && (c.parentId ?? null) === parentId && coreName(c.name) === coreName(name);
   const candidates = guild.channels.cache.filter(sameKind);
 
   let channel = guild.channels.cache.get(g.channels[key])
@@ -238,6 +282,11 @@ module.exports = {
     }
     db.save();
 
+    // 2c. Communauté Discord
+    await step('Activation de la Communauté Discord...');
+    const community = await enableCommunity(guild);
+    if (!community.ok) console.error('[setup] Communauté :', community.error);
+
     // 3. Panneaux
     await step('Envoi des embeds...');
     let duplicates = 0;
@@ -287,6 +336,12 @@ module.exports = {
         + '👉 Pense à t\'attribuer le rôle 👑 Fondateur.\n'
         + '👉 Tu peux relancer `/setup` à tout moment après avoir modifié `config.js`.',
       );
+    summary.addFields({
+      name: '🌐 Communauté Discord',
+      value: community.ok
+        ? `✅ Activée${community.converted.length ? ` — ${community.converted.join(', ')} converti en salon d'annonces` : ''}.`
+        : `⚠️ Non activée : ${community.error}\nTu peux l'activer dans Paramètres du serveur → Activer la Communauté (les prérequis sont déjà réglés), puis relancer \`/setup\`.`,
+    });
     if (removedDuplicates.length) {
       summary.addFields({ name: '🧹 Salons en double supprimés', value: removedDuplicates.join(', ').slice(0, 1024) });
     }

@@ -5,8 +5,10 @@ const { base, success, error } = require('../utils/embeds');
 
 module.exports = {
   prefixes: ['embed_modal'],
-  async handle(interaction, channelId) {
+  // arg = "<salonId>" ou "<salonId>:<rôleId à mentionner>"
+  async handle(interaction, arg) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const [channelId, roleId] = arg.split(':');
     const channel = interaction.guild.channels.cache.get(channelId);
     if (!channel?.isTextBased()) return interaction.editReply({ embeds: [error('Salon introuvable.')] });
 
@@ -23,7 +25,16 @@ module.exports = {
       embed.setImage(image);
     }
 
-    await channel.send({ embeds: [embed] });
+    // Mention optionnelle (@everyone si le rôle choisi est @everyone)
+    const everyone = roleId === interaction.guild.id;
+    const role = roleId && !everyone ? interaction.guild.roles.cache.get(roleId) : null;
+    const msg = await channel.send({
+      content: everyone ? '@everyone' : role ? `${role}` : undefined,
+      embeds: [embed],
+      allowedMentions: everyone ? { parse: ['everyone'] } : { roles: role ? [role.id] : [] },
+    });
+    // Salon d'annonces : publication auto vers les serveurs abonnés
+    if (msg.crosspostable) await msg.crosspost().catch(() => null);
     return interaction.editReply({ embeds: [success(`Embed envoyé dans ${channel}.`)] });
   },
 };
