@@ -93,10 +93,10 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 
 ## 🌐 Communauté Discord, âge et rôles
 
--  **active la Communauté** : niveau de vérification ≥ faible, filtre de contenu pour tous, notifications « mentions seulement », #règles comme salon des règles, **#📣┃discord-updates** (staff) pour les messages de Discord. **#📢┃annonces** devient un salon d'annonces suivable (les annonces du bot sont publiées automatiquement).
+- `/setup` **active la Communauté** : niveau de vérification ≥ faible, filtre de contenu pour tous, notifications « mentions seulement », #règles comme salon des règles, **#📣┃discord-updates** (staff) pour les messages de Discord. **#📢┃annonces** devient un salon d'annonces suivable (les annonces du bot sont publiées automatiquement).
 - **Âge** : dans #vérification, le membre accepte le règlement avec « -18 ans » ou « +18 ans ». Les membres déjà vérifiés choisissent leur âge dans #rôles (menu « Ton âge »).
 - **Notifications** (#rôles) : 🔔 Annonces, 🆕 Mises à jour, 🛠️ Statut serveur (redémarrage du serveur), 🏆 Tournois, 🎉 Events, 🎁 Giveaways (mentionné à chaque /giveaway), 📊 Sondages, + un rôle par mini-jeu.
--  : publie un embed en mentionnant un rôle (ex. 🆕 Mises à jour).
+- `/embed mention:@rôle` : publie un embed en mentionnant un rôle (ex. 🆕 Mises à jour).
 - **#👀┃spoilers** (MINI-JEUX) : avant-premières, seul le staff publie.
 
 ## 📋 Commandes
