@@ -9,6 +9,11 @@
 //   POST /api/sanctions             ← { action: 'create'|'revoke', id?, type, target: {uuid, name}, reason, staff, expiresAt, server }
 //   GET  /public/votes              → { top: [{ name, votes }], updatedAt }   (sans auth, CORS : PUBLIC_ORIGINS)
 //   GET  /public/leaderboards       → { games: { <serveur>: { boards } } }      (sans auth, CORS : PUBLIC_ORIGINS)
+//   POST /public/site-link/code     → { code, token, expiresAt }                (liaison du site ; 5 par IP / 10 min)
+//   GET  /public/site-link/status   → { status, account? }                       (Authorization: Bearer <token du site>)
+//   DELETE /public/site-link        → { ok }                                     (délier ; même jeton)
+//   POST /api/site-link             ← { code, uuid, name }                       (/site <code> en jeu)
+//   GET  /api/site-profiles/wanted  → { uuids }      POST /api/site-profiles ← { profiles: [...] }
 //
 // Authentification : en-tête "Authorization: Bearer <BRIDGE_SECRET>".
 const http = require('node:http');
@@ -23,6 +28,7 @@ const leaderboards = require('../utils/leaderboards');
 const gameSanctions = require('../utils/gameSanctions');
 const linkedRole = require('../utils/linkedRole');
 const db = require('../utils/db');
+const siteLinks = require('../utils/siteLinks');
 
 const MAX_BODY = 64 * 1024; // classements : ~10 Ko
 
@@ -36,13 +42,32 @@ function send(res, status, body, headers = {}) {
 const PUBLIC_ORIGINS = (process.env.PUBLIC_ORIGINS || 'https://mcbloc.fr,https://www.mcbloc.fr')
   .split(',').map((o) => o.trim()).filter(Boolean);
 
-function corsHeaders(origin) {
-  const headers = { 'Cache-Control': 'public, max-age=60', Vary: 'Origin' };
+function corsHeaders(origin, { privateData = false } = {}) {
+  const headers = { 'Cache-Control': privateData ? 'no-store' : 'public, max-age=60', Vary: 'Origin' };
   if (origin && PUBLIC_ORIGINS.includes(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS';
+    headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS';
+    headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';
+    headers['Access-Control-Max-Age'] = '600';
   }
   return headers;
+}
+
+const bearer = (req) => {
+  const h = req.headers.authorization ?? '';
+  return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+};
+
+// Anti-abus : 5 codes de liaison par adresse IP toutes les 10 minutes.
+const codeRequests = new Map();
+function allowCode(req, now = Date.now()) {
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim();
+  const recent = (codeRequests.get(ip) ?? []).filter((t) => now - t < 10 * 60 * 1000);
+  if (recent.length >= 5) return false;
+  recent.push(now);
+  codeRequests.set(ip, recent);
+  if (codeRequests.size > 5000) codeRequests.clear();
+  return true;
 }
 
 /** Classements pour le site : noms et valeurs seulement (pas d'UUID). */
@@ -88,12 +113,21 @@ function createServer(client, secret) {
     try {
       if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, ready: client.isReady() });
 
-      // Routes publiques en lecture seule pour le site (mcbloc.fr) : aucun secret, aucune UUID.
+      // Routes publiques pour le site (mcbloc.fr) : aucun secret du pont, aucune UUID d'un autre joueur.
       if (url.pathname.startsWith('/public/')) {
-        const cors = corsHeaders(req.headers.origin);
+        const privateData = url.pathname.startsWith('/public/site-link');
+        const cors = corsHeaders(req.headers.origin, { privateData });
         if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
         if (req.method === 'GET' && url.pathname === '/public/votes') return send(res, 200, leaderboards.topVoters(), cors);
         if (req.method === 'GET' && url.pathname === '/public/leaderboards') return send(res, 200, publicLeaderboards(), cors);
+
+        // Liaison du site (le navigateur garde un jeton secret, envoyé en "Authorization: Bearer")
+        if (req.method === 'POST' && url.pathname === '/public/site-link/code') {
+          if (!allowCode(req)) return send(res, 429, { error: 'too-many-requests' }, cors);
+          return send(res, 200, siteLinks.createCode(), cors);
+        }
+        if (req.method === 'GET' && url.pathname === '/public/site-link/status') return send(res, 200, siteLinks.status(bearer(req)), cors);
+        if (req.method === 'DELETE' && url.pathname === '/public/site-link') return send(res, 200, { ok: siteLinks.unlink(bearer(req)) }, cors);
         return send(res, 404, { error: 'not-found' }, cors);
       }
 
@@ -108,6 +142,19 @@ function createServer(client, secret) {
         // Mise à jour des panneaux en arrière-plan (le proxy n'attend pas Discord)
         for (const guild of client.guilds.cache.values()) leaderboards.refreshPanels(guild).catch(() => null);
         return send(res, 200, { ok: true, games: stored });
+      }
+
+      // Liaison du site : /site <code> en jeu, puis profils des comptes liés
+      if (req.method === 'POST' && url.pathname === '/api/site-link') {
+        const body = await readJson(req);
+        return send(res, 200, siteLinks.redeem(body.code, body.uuid, body.name));
+      }
+      if (req.method === 'GET' && url.pathname === '/api/site-profiles/wanted') {
+        return send(res, 200, { uuids: siteLinks.wantedUuids() });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/site-profiles') {
+        const body = await readJson(req);
+        return send(res, 200, { ok: true, stored: siteLinks.storeProfiles(body.profiles) });
       }
 
       if (req.method === 'POST' && url.pathname === '/api/sanctions') {
