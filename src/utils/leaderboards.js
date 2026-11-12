@@ -38,7 +38,7 @@ function store(body) {
 function panelPayload(game, data, links = {}) {
   const byUuid = Object.fromEntries(Object.entries(links).map(([discordId, l]) => [l.uuid, discordId]));
   const medals = ['🥇', '🥈', '🥉'];
-  const embed = base(0xf1c40f)
+  const embed = base(config.colors.accent)
     .setTitle(title(game))
     .setDescription(`${game.emoji} ${game.description}\n🔄 Mis à jour <t:${Math.floor(data.updatedAt / 1000)}:R>`);
   for (const board of data.boards) {
@@ -55,10 +55,16 @@ function panelPayload(game, data, links = {}) {
 
 const lastHash = new Map();
 
+/** Panneau « Top voteurs du mois », envoyé par le proxy comme un jeu à part (server: 'votes'). */
+const VOTES_BOARD = {
+  id: 'votes', server: 'votes', name: 'des votes du mois', emoji: '🗳️',
+  description: 'Les joueurs qui ont le plus voté ce mois-ci. Vote toi aussi avec /vote !',
+};
+
 async function refreshPanels(guild, force = false) {
   const st = db.guild(guild.id).state;
   const links = db.guild(guild.id).links;
-  for (const game of config.minigames) {
+  for (const game of [...config.minigames, VOTES_BOARD]) {
     const data = st.leaderboards?.[game.server];
     if (!game.server || !data) continue;
     const hash = JSON.stringify(data.boards);
@@ -70,4 +76,14 @@ async function refreshPanels(guild, force = false) {
   }
 }
 
-module.exports = { store, sanitize, panelPayload, refreshPanels, title };
+/** Top voteurs du mois (pour le site, sans les UUID) : { top: [{ name, votes }], updatedAt }. */
+function topVoters() {
+  const guildId = db.guildIds()[0];
+  const data = guildId ? db.guild(guildId).state.leaderboards?.votes : null;
+  return {
+    top: (data?.boards?.[0]?.entries ?? []).map((e) => ({ name: e.name, votes: e.value })),
+    updatedAt: data?.updatedAt ?? null,
+  };
+}
+
+module.exports = { store, sanitize, panelPayload, refreshPanels, title, topVoters, VOTES_BOARD };

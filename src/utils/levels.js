@@ -135,7 +135,7 @@ async function voiceTick(client) {
 function boardPayload(guild) {
   const top = ranking(guild.id).slice(0, 10);
   const medals = ['🥇', '🥈', '🥉'];
-  const embed = base(0xf1c40f)
+  const embed = base(config.colors.accent)
     .setTitle(BOARD_TITLE)
     .setDescription(
       'Gagne de l\'XP en discutant et en vocal. Paliers : '

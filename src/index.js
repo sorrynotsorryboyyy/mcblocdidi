@@ -36,6 +36,9 @@ const client = new Client({
   partials: [Partials.GuildMember],
 });
 
+// ---------- Infos publiques du réseau (network.json publié par le site) ----------
+require('./utils/network').start();
+
 // ---------- Commandes ----------
 client.commands = loadCommands();
 

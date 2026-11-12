@@ -13,7 +13,7 @@ module.exports = {
     const medals = ['🥇', '🥈', '🥉'];
     const mine = levels.rankOf(interaction.guild.id, interaction.user.id);
     return interaction.reply({
-      embeds: [base(0xf1c40f)
+      embeds: [base(config.colors.accent)
         .setTitle(`🏅 Top Discord — ${config.serverName}`)
         .setDescription(top.length
           ? top.map(([id, r], i) => `${medals[i] ?? `\`#${i + 1}\``} <@${id}> — niveau **${r.level}** (${r.xp} XP)`).join('\n')

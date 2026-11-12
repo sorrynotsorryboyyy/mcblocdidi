@@ -62,7 +62,7 @@ function boardPayload(guild) {
   const top = leaderboard(guild.id);
   const medals = ['🥇', '🥈', '🥉'];
   const { rewardCoins, holdDays, minAccountAgeDays } = config.invites;
-  const embed = base(0xf1c40f)
+  const embed = base(config.colors.accent)
     .setTitle(BOARD_TITLE)
     .setDescription(
       `Invite tes amis et gagne **${rewardCoins} pièces** en jeu par invitation validée !\n`

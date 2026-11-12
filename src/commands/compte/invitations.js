@@ -13,7 +13,7 @@ module.exports = {
     const user = interaction.options.getUser('membre') ?? interaction.user;
     const s = invites.stats(interaction.guild.id, user.id);
     const rank = invites.leaderboard(interaction.guild.id, 1000).findIndex(([id]) => id === user.id);
-    const embed = base(0xf1c40f)
+    const embed = base(config.colors.accent)
       .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
       .setTitle('📨 Invitations')
       .addFields(

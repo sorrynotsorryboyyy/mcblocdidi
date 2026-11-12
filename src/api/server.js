@@ -7,6 +7,8 @@
 //   POST /api/link                  ← { code, uuid, name } → { ok, discord? , error? }
 //   POST /api/leaderboards          ← { games: [{ server, boards: [{ key, title, entries: [{ uuid, name, value }] }] }] }
 //   POST /api/sanctions             ← { action: 'create'|'revoke', id?, type, target: {uuid, name}, reason, staff, expiresAt, server }
+//   GET  /public/votes              → { top: [{ name, votes }], updatedAt }   (sans auth, CORS : PUBLIC_ORIGINS)
+//   GET  /public/leaderboards       → { games: { <serveur>: { boards } } }      (sans auth, CORS : PUBLIC_ORIGINS)
 //
 // Authentification : en-tête "Authorization: Bearer <BRIDGE_SECRET>".
 const http = require('node:http');
@@ -20,13 +22,41 @@ const monitor = require('../utils/monitor');
 const leaderboards = require('../utils/leaderboards');
 const gameSanctions = require('../utils/gameSanctions');
 const linkedRole = require('../utils/linkedRole');
+const db = require('../utils/db');
 
 const MAX_BODY = 64 * 1024; // classements : ~10 Ko
 
-function send(res, status, body) {
+function send(res, status, body, headers = {}) {
   const json = JSON.stringify(body);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(json) });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(json), ...headers });
   res.end(json);
+}
+
+// Origines autorisées pour les routes /public/* (le site). PUBLIC_ORIGINS="https://a.fr,https://b.fr"
+const PUBLIC_ORIGINS = (process.env.PUBLIC_ORIGINS || 'https://mcbloc.fr,https://www.mcbloc.fr')
+  .split(',').map((o) => o.trim()).filter(Boolean);
+
+function corsHeaders(origin) {
+  const headers = { 'Cache-Control': 'public, max-age=60', Vary: 'Origin' };
+  if (origin && PUBLIC_ORIGINS.includes(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS';
+  }
+  return headers;
+}
+
+/** Classements pour le site : noms et valeurs seulement (pas d'UUID). */
+function publicLeaderboards() {
+  const guildId = db.guildIds()[0];
+  const boards = guildId ? db.guild(guildId).state.leaderboards ?? {} : {};
+  const games = {};
+  for (const [server, data] of Object.entries(boards)) {
+    games[server] = {
+      updatedAt: data.updatedAt ?? null,
+      boards: (data.boards ?? []).map((b) => ({ key: b.key, title: b.title, entries: b.entries.map((e) => ({ name: e.name, value: e.value })) })),
+    };
+  }
+  return { games };
 }
 
 function authorized(req, secret) {
@@ -57,6 +87,16 @@ function createServer(client, secret) {
     const url = new URL(req.url, 'http://localhost');
     try {
       if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, ready: client.isReady() });
+
+      // Routes publiques en lecture seule pour le site (mcbloc.fr) : aucun secret, aucune UUID.
+      if (url.pathname.startsWith('/public/')) {
+        const cors = corsHeaders(req.headers.origin);
+        if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+        if (req.method === 'GET' && url.pathname === '/public/votes') return send(res, 200, leaderboards.topVoters(), cors);
+        if (req.method === 'GET' && url.pathname === '/public/leaderboards') return send(res, 200, publicLeaderboards(), cors);
+        return send(res, 404, { error: 'not-found' }, cors);
+      }
+
       if (!url.pathname.startsWith('/api/')) return send(res, 404, { error: 'not-found' });
       if (!secret) return send(res, 503, { error: 'bridge-disabled' });
       if (!authorized(req, secret)) return send(res, 401, { error: 'unauthorized' });

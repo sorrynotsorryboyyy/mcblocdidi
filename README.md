@@ -20,6 +20,8 @@ partenaires, **parrainage récompensé en pièces** et **VIP en jeu pour chaque 
 | `BRIDGE_SECRET` | une longue chaîne aléatoire (≥ 32 caractères), **identique** dans la config du proxy |
 | `INVITE_REWARD` | *(optionnel)* pièces par invitation validée, 500 par défaut |
 | `MC_HOST` / `MC_PORT` | *(optionnel)* IP du serveur Minecraft |
+| `NETWORK_URL` | *(optionnel)* infos publiques du réseau, `https://mcbloc.fr/network.json` par défaut (liens, jeux, règles, votes) |
+| `PUBLIC_ORIGINS` | *(optionnel)* sites autorisés à lire `/public/votes` et `/public/leaderboards`, `https://mcbloc.fr,https://www.mcbloc.fr` par défaut |
 
 ### 2. Volume (indispensable)
 Clic droit sur le service → **Add Volume** → *Mount path* **`/data`**. Sans volume, le bot oublie tout à chaque mise à jour.
@@ -123,6 +125,7 @@ Tous les montants et seuils se règlent dans `config.js` (`launch`, `levels`, `d
 | Commande | Description | Qui |
 |---|---|---|
 | `/help`, `/ping`, `/ip`, `/status`, `/jeux` | Infos | Tous |
+| `/vote` | Sites de vote (Aevum en partenaire), récompenses et paliers du mois | Tous |
 | `/lier`, `/delier`, `/compte` | Liaison Minecraft, récompenses | Tous |
 | `/invitations [membre]` | Invitations et classement | Tous |
 | `/suggestion`, `/lfg` | Idées, recherche de joueurs | Tous |

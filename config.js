@@ -16,23 +16,30 @@ module.exports = {
   minecraft: {
     host: MC_HOST,
     port: Number(process.env.MC_PORT) || 25565,
-    version: '1.8 - 1.21',      // texte affiché dans /ip et #infos-serveur
+    version: '1.8 – 1.21',      // texte affiché dans /ip et #infos-serveur (même libellé que le site)
   },
 
-  // Liens affichés dans #infos-serveur (laisse '' pour masquer)
+  // Liens affichés dans #infos-serveur et le MP de bienvenue (laisse '' pour masquer).
+  // Mis à jour automatiquement depuis https://mcbloc.fr/network.json (src/utils/network.js).
   links: {
-    site: '',
-    boutique: '',
-    vote: '',
+    site: 'https://mcbloc.fr',
+    boutique: 'https://mcbloc.fr/boutique',
+    vote: 'https://mcbloc.fr/vote',
   },
+  // Lien d'invitation public du Discord (utilisé par le site et les messages en jeu)
+  discordInvite: 'https://discord.mcbloc.fr',
+  // Source unique des infos publiques (liens, jeux, règles, votes), publiée par le site
+  networkUrl: process.env.NETWORK_URL || 'https://mcbloc.fr/network.json',
 
-  // Couleurs des embeds
+  // Couleurs des embeds : charte MCBloc (mêmes valeurs que Theme.java et le site)
   colors: {
-    primary: 0x2ecc71,
-    success: 0x57f287,
-    error: 0xed4245,
-    warning: 0xfee75c,
-    info: 0x5865f2,
+    primary: 0x00c6ff,
+    secondary: 0x0072ff,
+    accent: 0xffd84d,
+    success: 0x55ff7f,
+    error: 0xff5555,
+    warning: 0xffaa33,
+    info: 0x0072ff,
     neutral: 0x2b2d31,
   },
 
@@ -194,33 +201,48 @@ module.exports = {
   //  `formerIds` : anciens ids → le salon et le rôle existants sont RENOMMÉS
   //  (messages conservés) au lieu d'être supprimés puis recréés.
   // ------------------------------------------------------------
+  //  VOTES : sites de vote et récompenses (/vote). Remplacés par network.json
+  //  dès qu'il est chargé ; ces valeurs servent seulement si le site est injoignable.
+  // ------------------------------------------------------------
+  votes: {
+    sites: [
+      {
+        id: 'aevum', name: 'Aevum Launcher', url: 'https://aevum-launcher.fr', partner: true, cooldownHours: 24,
+        howTo: 'Vote directement depuis le launcher Aevum, dans la fiche du serveur MCBloc.',
+        reward: { coins: 150, crates: [{ id: 'basique', chance: 0.15 }, { id: 'rare', chance: 0.03 }] },
+      },
+    ],
+    milestones: [{ votes: 10, crate: 'basique' }, { votes: 30, crate: 'rare' }, { votes: 60, crate: 'legendaire' }],
+  },
+
+  // ------------------------------------------------------------
   minigames: [
     {
       id: 'piggy-wars', name: 'Piggy Wars', emoji: '🐷', server: 'piggywars',
-      description: '3vs3 — lance des cochons sur tes adversaires pour les éliminer ou les pousser dans le vide !',
+      description: 'Rouge vs Bleu, 1v1 à 3v3 — lance des cochons sur tes adversaires pour les éliminer ou les pousser dans le vide !',
     },
     {
       id: 'sumogames', name: 'SumoGames', emoji: '🤼', formerIds: ['sumo-tower'], server: 'sumotower',
-      description: 'Sumo classique avec des classes et du loot façon Survival Games — sois le dernier sur le ring !',
+      description: 'Chacun pour soi, 2 à 8 joueurs — sumo sur une tour à plusieurs étages : pas de dégâts, que du recul. Sois le dernier debout !',
     },
     {
       id: 'corewars', name: 'CoreWars', emoji: '🔮', formerIds: ['fallen-clan'], server: 'corewars',
-      description: '10vs10 — détruis le cœur de la base ennemie et protège le tien !',
+      description: 'Rouge vs Bleu, jusqu\'à 10v10 — construis, défends et détruis le cœur de la base ennemie !',
     },
   ],
 
   // ------------------------------------------------------------
   //  RÈGLES affichées dans #règles
   // ------------------------------------------------------------
+  // Liste commune au site (mcbloc.fr/regles) et au serveur : mise à jour depuis network.json.
   rules: [
-    'Respecte tous les membres : aucune insulte, discrimination ou harcèlement.',
-    'Pas de spam, flood ou abus de majuscules.',
-    'Aucune publicité sans autorisation du staff.',
+    'Respecte tout le monde : aucune insulte, discrimination ou harcèlement.',
+    'Pas de spam, de flood ni d\'abus de majuscules.',
+    'Aucune publicité ni lien vers d\'autres serveurs sans l\'accord du staff.',
     'Pas de contenu NSFW, choquant ou illégal.',
-    'Utilise les bons salons pour chaque sujet.',
-    'Triche, hacks et clients modifiés interdits sur le serveur Minecraft.',
     'Pas d\'usurpation d\'identité (staff ou joueurs).',
-    'Les décisions du staff sont à respecter ; en cas de désaccord, ouvre un ticket.',
+    'Utilise les bons salons pour chaque sujet.',
+    'Le staff a le dernier mot : en cas de désaccord, ouvre un ticket sur le Discord.',
   ],
 
   // ------------------------------------------------------------
@@ -235,10 +257,12 @@ module.exports = {
       permissions: ['KickMembers', 'BanMembers', 'ModerateMembers', 'ManageMessages', 'MuteMembers', 'MoveMembers', 'ViewAuditLog'],
     },
     support: { name: '🎫 Support', color: 0x1abc9c, hoist: true, permissions: ['ManageMessages'] },
-    vip: { name: '💎 VIP', color: 0xf1c40f, hoist: true, permissions: [] },
+    vip: { name: '💎 VIP', color: 0x4dd2ff, hoist: true, permissions: [] },
     partner: { name: '🤝 Partenaire', color: 0x9b59b6, hoist: true, permissions: [] },
     // Paliers de niveau Discord (voir `levels.tiers`)
-    level35: { name: '👑 Légende', color: 0xe91e63, hoist: true, permissions: [] },
+    // (anciennement « 👑 Légende » : renommé pour ne pas être confondu avec le grade payant Légende ;
+    //  /setup retrouve le rôle existant par son id et le renomme, sans en créer un nouveau)
+    level35: { name: '🌟 Champion', color: 0xe91e63, hoist: true, permissions: [] },
     level20: { name: '⚡ Vétéran', color: 0x9b59b6, hoist: false, permissions: [] },
     level10: { name: '🔥 Habitué', color: 0xe67e22, hoist: false, permissions: [] },
     level5: { name: '🌱 Actif', color: 0x2ecc71, hoist: false, permissions: [] },

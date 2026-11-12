@@ -1,0 +1,143 @@
+{
+  "$comment": "Source unique des informations publiques du réseau MCBloc. Lue par le site (build), publiée sur https://mcbloc.fr/network.json, puis lue par le bot Discord et le plugin. Modifier ici, puis redéployer le site.",
+  "version": 1,
+  "name": "MCBloc",
+  "brand": "MCBLOC",
+  "tagline": "Réseau de mini-jeux",
+  "slogan": "Le réseau de mini-jeux qui fait des vagues.",
+  "description": "MCBloc, le réseau Minecraft de mini-jeux : Piggy Wars, SumoGames, CoreWars. Classement ELO, pass saisonnier, cosmétiques et défis quotidiens.",
+  "ip": "play.mcbloc.fr",
+  "port": 25565,
+  "versions": "1.8 – 1.21",
+  "currency": { "singular": "pièce", "plural": "pièces" },
+  "links": {
+    "site": "https://mcbloc.fr",
+    "boutique": "https://mcbloc.fr/boutique",
+    "vote": "https://mcbloc.fr/vote",
+    "regles": "https://mcbloc.fr/regles",
+    "actualites": "https://mcbloc.fr/actualites",
+    "discord": "https://discord.mcbloc.fr"
+  },
+  "colors": {
+    "primary": "#00c6ff",
+    "secondary": "#0072ff",
+    "accent": "#ffd84d",
+    "text": "#e6e6e6",
+    "muted": "#a0a0a0",
+    "success": "#55ff7f",
+    "error": "#ff5555",
+    "warning": "#ffaa33",
+    "rarity": { "common": "#b0b0b0", "rare": "#00c6ff", "epic": "#b36bff", "legendary": "#ffd84d" }
+  },
+  "games": [
+    {
+      "id": "piggy-wars",
+      "name": "Piggy Wars",
+      "server": "piggywars",
+      "emoji": "🐷",
+      "color": "#ff7aa8",
+      "mode": "Rouge vs Bleu · 1v1 à 3v3",
+      "description": "Lance des cochons sur tes adversaires pour les éliminer ou les pousser dans le vide ! Première équipe à 10 kills.",
+      "features": ["Classement ELO", "~10 classes", "Parties rapides"]
+    },
+    {
+      "id": "sumogames",
+      "name": "SumoGames",
+      "server": "sumotower",
+      "emoji": "🤼",
+      "color": "#55ff7f",
+      "mode": "Chacun pour soi · 2 à 8 joueurs",
+      "description": "Sumo sur une tour à plusieurs étages : pas de dégâts, que du recul. Coffres et kits façon Survival Games — sois le dernier debout !",
+      "features": ["Knockback pur", "Coffres à loot", "Kits"]
+    },
+    {
+      "id": "corewars",
+      "name": "CoreWars",
+      "server": "corewars",
+      "emoji": "🔮",
+      "color": "#b36bff",
+      "mode": "Rouge vs Bleu · jusqu'à 10v10",
+      "description": "Construis, défends et détruis le cœur de la base ennemie. Générateurs d'or, 7 classes et de grosses batailles d'équipe.",
+      "features": ["7 classes", "Générateurs d'or", "Grandes équipes"]
+    }
+  ],
+  "ranks": [
+    {
+      "id": "starter",
+      "name": "Starter",
+      "price": 3.99,
+      "color": "#ffb38a",
+      "bonus": "+10 %",
+      "perks": ["Préfixe [Starter] et pseudo coloré", "+10 % de pièces et d'XP", "Titre « Starter »"]
+    },
+    {
+      "id": "vip",
+      "name": "VIP",
+      "price": 7.99,
+      "color": "#4dd2ff",
+      "bonus": "+25 %",
+      "includes": "Starter",
+      "popular": true,
+      "perks": [
+        "+25 % de pièces et d'XP",
+        "+50 % sur la récompense quotidienne",
+        "Piste VIP du pass saisonnier",
+        "/fly au lobby",
+        "Connexion même si le réseau est plein",
+        "Pas de délai dans le chat",
+        "100 amis, groupes de 12",
+        "Cosmétiques VIP"
+      ]
+    },
+    {
+      "id": "vipplus",
+      "name": "VIP+",
+      "price": 12.99,
+      "color": "#f5c518",
+      "bonus": "+50 %",
+      "includes": "VIP",
+      "perks": ["+50 % de pièces et d'XP", "Couleurs dans le chat", "/couleur : choix de la couleur du pseudo", "Arrivée annoncée au lobby", "Cosmétiques VIP+"]
+    },
+    {
+      "id": "legende",
+      "name": "Légende",
+      "price": 19.99,
+      "color": "#ff5fd2",
+      "bonus": "+75 %",
+      "includes": "VIP+",
+      "perks": ["+75 % de pièces et d'XP", "Cosmétiques Légende exclusifs", "Ailes, fée, ballon et titre Légende"]
+    }
+  ],
+  "rules": [
+    { "text": "Respecte tout le monde : aucune insulte, discrimination ou harcèlement.", "where": ["jeu", "discord"] },
+    { "text": "Pas de triche : hacks, mods ou clients modifiés, macros et exploitation de bugs sont interdits.", "where": ["jeu"] },
+    { "text": "Pas de spam, de flood ni d'abus de majuscules.", "where": ["jeu", "discord"] },
+    { "text": "Aucune publicité ni lien vers d'autres serveurs sans l'accord du staff.", "where": ["jeu", "discord"] },
+    { "text": "Pas de contenu NSFW, choquant ou illégal.", "where": ["jeu", "discord"] },
+    { "text": "Pas d'usurpation d'identité (staff ou joueurs).", "where": ["jeu", "discord"] },
+    { "text": "Un seul compte par joueur : contourner une sanction avec un autre compte entraîne un bannissement.", "where": ["jeu"] },
+    { "text": "Utilise les bons salons pour chaque sujet.", "where": ["discord"] },
+    { "text": "Le staff a le dernier mot : en cas de désaccord, ouvre un ticket sur le Discord.", "where": ["jeu", "discord"] }
+  ],
+  "votes": {
+    "$comment": "Récompenses données par le proxy (plafonnées côté serveur). votifierService = nom de service envoyé par le site via NuVotifier.",
+    "sites": [
+      {
+        "id": "aevum",
+        "name": "Aevum Launcher",
+        "url": "https://aevum-launcher.fr",
+        "votifierService": "Aevum",
+        "partner": true,
+        "cooldownHours": 24,
+        "howTo": "Vote directement depuis le launcher Aevum, dans la fiche du serveur MCBloc.",
+        "reward": { "coins": 150, "crates": [{ "id": "basique", "chance": 0.15 }, { "id": "rare", "chance": 0.03 }] }
+      }
+    ],
+    "defaultReward": { "coins": 50, "crates": [{ "id": "basique", "chance": 0.05 }] },
+    "milestones": [
+      { "votes": 10, "crate": "basique" },
+      { "votes": 30, "crate": "rare" },
+      { "votes": 60, "crate": "legendaire" }
+    ]
+  }
+}
