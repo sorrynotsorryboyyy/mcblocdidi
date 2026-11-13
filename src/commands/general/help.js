@@ -1,28 +1,38 @@
-const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, PermissionsBitField } = require('discord.js');
 const config = require('../../../config');
-const { base } = require('../../utils/embeds');
+const guide = require('../../utils/guide');
 
-const CATEGORIES = {
-  general: '📖 Général',
-  minecraft: '🎮 Minecraft & Mini-jeux',
-  compte: '🔗 Compte & récompenses',
+const STAFF_CATEGORIES = {
   moderation: '🛡️ Modération',
   admin: '⚙️ Administration',
 };
 
+/** Le membre peut-il utiliser cette commande (permissions par défaut de la commande) ? */
+function canUse(member, command) {
+  const required = command.data.default_member_permissions;
+  if (required === undefined || required === null) return true;
+  return !!member?.permissions?.has?.(new PermissionsBitField(BigInt(required)));
+}
+
+/** Liste personnalisée : le guide joueur, plus les commandes staff que le membre peut utiliser. */
+function helpPayload(member, commands) {
+  const payload = guide.commandsPayload();
+  const embed = payload.embeds[0];
+  for (const [cat, label] of Object.entries(STAFF_CATEGORIES)) {
+    const usable = [...commands.values()].filter((c) => c.category === cat && canUse(member, c));
+    if (!usable.length) continue;
+    embed.addFields({ name: `${label} (staff)`, value: usable.map((c) => `\`/${c.data.name}\` — ${c.data.description}`).join('\n').slice(0, 1024) });
+  }
+  return payload;
+}
+
 module.exports = {
-  data: new SlashCommandBuilder().setName('help').setDescription('Liste des commandes du bot'),
+  data: new SlashCommandBuilder().setName('help').setDescription(`Les commandes de ${config.serverName}`),
+
+  helpPayload,
+  canUse,
 
   async execute(interaction, client) {
-    const embed = base().setTitle(`📚 Commandes de ${config.serverName}`);
-    for (const [cat, label] of Object.entries(CATEGORIES)) {
-      const cmds = client.commands.filter((c) => c.category === cat);
-      if (!cmds.size) continue;
-      embed.addFields({
-        name: label,
-        value: cmds.map((c) => `\`/${c.data.name}\` — ${c.data.description}`).join('\n'),
-      });
-    }
-    return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return interaction.reply({ ...helpPayload(interaction.member, client.commands), flags: MessageFlags.Ephemeral });
   },
 };

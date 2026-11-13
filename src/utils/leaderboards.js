@@ -1,12 +1,16 @@
-// Classements des mini-jeux, envoyés par le proxy (POST /api/leaderboards) et affichés
-// dans #classements : un panneau unique par jeu, réécrit seulement si les données changent.
+// Classements, affichés dans #classements sous la forme d'UN SEUL embed mis à jour automatiquement :
+// top 5 des votes du mois, de chaque mini-jeu (victoires) et des niveaux Discord.
+// Les données des jeux et des votes sont envoyées par le proxy (POST /api/leaderboards).
 const config = require('../../config');
 const db = require('./db');
 const { base } = require('./embeds');
 const { ensurePanel, byTitle } = require('./panels');
+const { getChannel } = require('./helpers');
 
 const NAME_RE = /^\w{1,16}$/;
-const title = (game) => `🏆 Classement ${game.name}`;
+const TOP = 5;
+const MEDALS = ['🥇', '🥈', '🥉'];
+const PANEL_TITLE = `🏆 Classements ${config.serverName}`;
 
 /** Valide et nettoie le corps envoyé par le proxy (fonction pure). */
 function sanitize(body) {
@@ -35,45 +39,78 @@ function store(body) {
   return Object.keys(games).length;
 }
 
-function panelPayload(game, data, links = {}) {
+/** Lignes « 🥇 **Steve** 🔗 — 12 » (fonction pure). */
+function lines(entries, byUuid = {}, unit = '') {
+  if (!entries?.length) return '*Personne pour le moment*';
+  return entries.slice(0, TOP)
+    .map((e, i) => `${MEDALS[i] ?? `\`${i + 1}.\``} **${e.name}**${byUuid[e.uuid] ? ' 🔗' : ''} — ${e.value.toLocaleString('fr-FR')}${unit}`)
+    .join('\n');
+}
+
+const boardOf = (data, key) => data?.boards?.find((b) => b.key === key) ?? data?.boards?.[0] ?? null;
+
+/**
+ * Le panneau unique (fonction pure, testée).
+ * @param state       état du serveur (state.leaderboards)
+ * @param links       comptes liés (pour la mention 🔗)
+ * @param levelsTop   top des niveaux Discord : [[discordId, { level, xp }], ...]
+ */
+function panelPayload(state, links = {}, levelsTop = [], votesChannelId = null) {
   const byUuid = Object.fromEntries(Object.entries(links).map(([discordId, l]) => [l.uuid, discordId]));
-  const medals = ['🥇', '🥈', '🥉'];
+  const boards = state?.leaderboards ?? {};
+  const updatedAt = Math.max(0, ...Object.values(boards).map((d) => d.updatedAt ?? 0));
+  const votes = votesChannelId ? `<#${votesChannelId}>` : 'le salon des votes';
+
   const embed = base(config.colors.accent)
-    .setTitle(title(game))
-    .setDescription(`${game.emoji} ${game.description}\n🔄 Mis à jour <t:${Math.floor(data.updatedAt / 1000)}:R>`);
-  for (const board of data.boards) {
-    embed.addFields({
-      name: board.title,
-      value: (board.entries.length
-        ? board.entries.map((e, i) => `${medals[i] ?? `\`${i + 1}.\``} **${e.name}**${byUuid[e.uuid] ? ' 🔗' : ''} — ${e.value.toLocaleString('fr-FR')}`).join('\n')
-        : '*Personne pour le moment*').slice(0, 1024),
-      inline: true,
-    });
+    .setTitle(PANEL_TITLE)
+    .setDescription(
+      `Les meilleurs joueurs du réseau, mis à jour automatiquement.\n🗳️ Pour grimper dans le top des votes, rends-toi dans ${votes} !`
+      + (updatedAt ? `\n🔄 Mis à jour <t:${Math.floor(updatedAt / 1000)}:R>` : ''),
+    )
+    .addFields({ name: '🗳️ Votes du mois', value: lines(boardOf(boards.votes, 'month')?.entries, byUuid, ' votes'), inline: false });
+
+  for (const game of config.minigames) {
+    embed.addFields({ name: `${game.emoji} ${game.name} — victoires`, value: lines(boardOf(boards[game.server], 'wins')?.entries, byUuid), inline: true });
   }
+
+  embed.addFields({
+    name: '🏅 Niveaux Discord',
+    value: levelsTop.length
+      ? levelsTop.slice(0, TOP).map(([id, r], i) => `${MEDALS[i] ?? `\`${i + 1}.\``} <@${id}> — niveau **${r.level}**`).join('\n')
+      : '*Personne pour le moment*',
+    inline: false,
+  });
+  embed.setFooter({ text: `${config.footer} · 🔗 = compte Minecraft lié` });
   return { embeds: [embed] };
 }
 
 const lastHash = new Map();
 
-/** Panneau « Top voteurs du mois », envoyé par le proxy comme un jeu à part (server: 'votes'). */
-const VOTES_BOARD = {
-  id: 'votes', server: 'votes', name: 'des votes du mois', emoji: '🗳️',
-  description: 'Les joueurs qui ont le plus voté ce mois-ci. Vote toi aussi avec /vote !',
-};
+/** Supprime les anciens panneaux (un par jeu, Top Discord) remplacés par le panneau unique. */
+async function removeLegacyPanels(guild) {
+  const g = db.guild(guild.id);
+  const keys = Object.keys(g.messages ?? {}).filter((k) => k.startsWith('lb_') || k === 'levelsBoard');
+  for (const key of keys) {
+    const ref = g.messages[key];
+    const channel = guild.channels.cache.get(ref?.channelId);
+    if (channel?.messages) await channel.messages.delete(ref.messageId).catch(() => null);
+    delete g.messages[key];
+  }
+  if (keys.length) db.save();
+  return keys.length;
+}
 
 async function refreshPanels(guild, force = false) {
-  const st = db.guild(guild.id).state;
-  const links = db.guild(guild.id).links;
-  for (const game of [...config.minigames, VOTES_BOARD]) {
-    const data = st.leaderboards?.[game.server];
-    if (!game.server || !data) continue;
-    const hash = JSON.stringify(data.boards);
-    const key = `${guild.id}:${game.server}`;
-    if (!force && lastHash.get(key) === hash) continue; // rien de neuf : pas d'édition inutile
-    lastHash.set(key, hash);
-    await ensurePanel(guild, `lb_${game.id}`, 'leaderboards', panelPayload(game, data, links), { match: byTitle(title(game)) })
-      .catch((err) => console.error('[classements]', err.message));
-  }
+  const g = db.guild(guild.id);
+  const { ranking } = require('./levels'); // chargé ici : levels.js rafraîchit aussi ce panneau
+  const levelsTop = ranking(guild.id).slice(0, TOP);
+  const payload = panelPayload(g.state, g.links, levelsTop, getChannel(guild, 'votes')?.id ?? null);
+  const hash = JSON.stringify(payload.embeds[0].data.fields) + payload.embeds[0].data.description;
+  if (!force && lastHash.get(guild.id) === hash) return 0; // rien de neuf : pas d'édition inutile
+  lastHash.set(guild.id, hash);
+  await removeLegacyPanels(guild);
+  return ensurePanel(guild, 'leaderboard', 'leaderboards', payload, { match: byTitle(PANEL_TITLE) })
+    .catch((err) => { console.error('[classements]', err.message); return 0; });
 }
 
 /** Top voteurs du mois (pour le site, sans les UUID) : { top: [{ name, votes }], updatedAt }. */
@@ -81,9 +118,9 @@ function topVoters() {
   const guildId = db.guildIds()[0];
   const data = guildId ? db.guild(guildId).state.leaderboards?.votes : null;
   return {
-    top: (data?.boards?.[0]?.entries ?? []).map((e) => ({ name: e.name, votes: e.value })),
+    top: (boardOf(data, 'month')?.entries ?? []).map((e) => ({ name: e.name, votes: e.value })),
     updatedAt: data?.updatedAt ?? null,
   };
 }
 
-module.exports = { store, sanitize, panelPayload, refreshPanels, title, topVoters, VOTES_BOARD };
+module.exports = { store, sanitize, panelPayload, refreshPanels, topVoters, lines, PANEL_TITLE };

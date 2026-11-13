@@ -3,10 +3,8 @@ const config = require('../../config');
 const db = require('./db');
 const { base } = require('./embeds');
 const { getChannel, getRole } = require('./helpers');
-const { ensurePanel, byTitle } = require('./panels');
 const { queueReward } = require('./rewards');
 
-const BOARD_TITLE = '🏅 Top Discord';
 const cfg = () => config.levels;
 
 /** XP nécessaire pour passer du niveau `lvl` au suivant (courbe type MEE6). */
@@ -132,29 +130,9 @@ async function voiceTick(client) {
   }
 }
 
-function boardPayload(guild) {
-  const top = ranking(guild.id).slice(0, 10);
-  const medals = ['🥇', '🥈', '🥉'];
-  const embed = base(config.colors.accent)
-    .setTitle(BOARD_TITLE)
-    .setDescription(
-      'Gagne de l\'XP en discutant et en vocal. Paliers : '
-      + cfg().tiers.map((t) => `niv. ${t.level} → **${t.coins} pièces**`).join(' · ') + '\n\n'
-      + (top.length
-        ? top.map(([id, r], i) => `${medals[i] ?? `\`#${i + 1}\``} <@${id}> — niveau **${r.level}** (${r.xp} XP)`).join('\n')
-        : '*Personne pour le moment… à toi de jouer !*'),
-    );
-  return { embeds: [embed] };
-}
-
-const lastBoard = new Map();
-async function refreshBoard(guild, force = false) {
-  const payload = boardPayload(guild);
-  const key = payload.embeds[0].data.description;
-  if (!force && lastBoard.get(guild.id) === key) return 0;
-  lastBoard.set(guild.id, key);
-  return ensurePanel(guild, 'levelsBoard', 'leaderboards', payload, { match: byTitle(BOARD_TITLE) })
-    .catch((err) => { console.error('[niveaux] classement :', err.message); return 0; });
+/** Le top des niveaux fait partie du panneau unique de #classements (leaderboards.js). */
+function refreshBoard(guild, force = false) {
+  return require('./leaderboards').refreshPanels(guild, force);
 }
 
 function start(client) {
@@ -166,5 +144,5 @@ function start(client) {
 
 module.exports = {
   start, onMessage, addXp, levelFromXp, xpForNext, tierFor, rankOf, ranking, refreshBoard,
-  eligibleMessage, voiceEarners, syncTierRole, BOARD_TITLE,
+  eligibleMessage, voiceEarners, syncTierRole,
 };

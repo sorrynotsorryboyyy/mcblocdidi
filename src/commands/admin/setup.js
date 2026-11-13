@@ -17,6 +17,7 @@ const levels = require('../../utils/levels');
 const leaderboards = require('../../utils/leaderboards');
 const launch = require('../../utils/launch');
 const linkedRole = require('../../utils/linkedRole');
+const guide = require('../../utils/guide');
 
 // ---------- Rôles ----------
 async function ensureRole(guild, def, g) {
@@ -286,6 +287,31 @@ module.exports = {
     }
     db.save();
 
+    // 2b'. Nettoyage : salons et rôles retirés de config.js (config.removed).
+    //      Un salon n'est supprimé que s'il est vide (aucun message d'un humain) ; sinon il est gardé et signalé.
+    const removedItems = [];
+    const keptChannels = [];
+    for (const key of config.removed?.channels ?? []) {
+      const ch = guild.channels.cache.get(g.channels[key]);
+      if (ch && await isDisposable(ch)) {
+        await ch.delete('/setup : salon retiré de config.js').catch(() => null);
+        removedItems.push(`#${ch.name}`);
+      } else if (ch) {
+        keptChannels.push(`#${ch.name}`);
+        continue; // gardé : on conserve aussi sa clé
+      }
+      delete g.channels[key];
+    }
+    for (const key of config.removed?.roles ?? []) {
+      const role = guild.roles.cache.get(g.roles[key]);
+      if (role?.editable) {
+        await role.delete('/setup : rôle retiré de config.js').catch(() => null);
+        removedItems.push(`@${role.name}`);
+      }
+      delete g.roles[key];
+    }
+    db.save();
+
     // 2c. Communauté Discord
     await step('Activation de la Communauté Discord...');
     const community = await enableCommunity(guild);
@@ -305,6 +331,7 @@ module.exports = {
     duplicates += (await boosts.refreshBoard(guild)) ?? 0;
     duplicates += (await levels.refreshBoard(guild, true)) ?? 0;
     duplicates += (await launch.refreshPanel(guild).catch(() => 0)) ?? 0;
+    duplicates += await guide.refreshPanels(guild); // #votes et #commandes-bot
     await leaderboards.refreshPanels(guild, true);
     const relinked = await linkedRole.repairAll(guild);
 
@@ -359,6 +386,15 @@ module.exports = {
     }
     if (removedGames.length) {
       summary.addFields({ name: '🗑️ Anciens mini-jeux supprimés', value: removedGames.join(', ').slice(0, 1024) });
+    }
+    if (removedItems.length) {
+      summary.addFields({ name: '🗑️ Salons et rôles retirés', value: removedItems.join(', ').slice(0, 1024) });
+    }
+    if (keptChannels.length) {
+      summary.addFields({
+        name: '⚠️ Salons retirés mais conservés',
+        value: `${keptChannels.join(', ')} contient des messages : supprime-le à la main s'il ne sert plus.`.slice(0, 1024),
+      });
     }
     if (skipped.length) {
       summary.addFields({

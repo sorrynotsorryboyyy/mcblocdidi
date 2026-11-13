@@ -1,8 +1,9 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { base } = require('../../utils/embeds');
 
 module.exports = {
-  data: new SlashCommandBuilder().setName('ping').setDescription('Affiche la latence du bot'),
+  data: new SlashCommandBuilder().setName('ping').setDescription('Affiche la latence du bot (staff)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   async execute(interaction, client) {
     const sent = Date.now();

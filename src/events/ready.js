@@ -10,6 +10,7 @@ const antiraid = require('../utils/antiraid');
 const monitor = require('../utils/monitor');
 const backup = require('../utils/backup');
 const leaderboards = require('../utils/leaderboards');
+const guide = require('../utils/guide');
 const { registerCommands } = require('../utils/commands');
 const db = require('../utils/db');
 
@@ -37,6 +38,7 @@ module.exports = {
     for (const guild of client.guilds.cache.values()) {
       await boosts.refreshBoard(guild);
       await leaderboards.refreshPanels(guild);
+      await guide.refreshPanels(guild); // #votes et #commandes-bot (si les salons existent)
     }
   },
 };

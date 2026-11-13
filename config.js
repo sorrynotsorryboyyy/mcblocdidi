@@ -246,6 +246,11 @@ module.exports = {
   ],
 
   // ------------------------------------------------------------
+  //  Salons et rôles RETIRÉS : /setup les supprime (un salon seulement s'il est vide)
+  // ------------------------------------------------------------
+  removed: { channels: ['tournaments'], roles: ['notifTournois'] },
+
+  // ------------------------------------------------------------
   //  RÔLES (créés du haut vers le bas de la hiérarchie)
   //  permissions : noms de PermissionFlagsBits de discord.js
   // ------------------------------------------------------------
@@ -277,14 +282,13 @@ module.exports = {
     notifAnnonces: { name: '🔔 Annonces', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des annonces' },
     notifUpdates: { name: '🆕 Mises à jour', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Nouveautés et patch notes du serveur' },
     notifStatus: { name: '🛠️ Statut serveur', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être prévenu quand le serveur redémarre' },
-    notifTournois: { name: '🏆 Tournois', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des tournois' },
     notifEvents: { name: '🎉 Events', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des events' },
     notifGiveaways: { name: '🎁 Giveaways', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Être notifié des giveaways' },
     notifPolls: { name: '📊 Sondages', color: 0x000000, hoist: false, permissions: [], selfAssign: true, description: 'Donner ton avis dans les sondages' },
     // + un rôle par mini-jeu, généré automatiquement (clé game_<id>)
   },
 
-  // Rôles considérés comme staff (accès tickets, salons staff, tournois)
+  // Rôles considérés comme staff (accès tickets, salons staff, commandes partout)
   staffRoles: ['founder', 'admin', 'moderator', 'support'],
 
   // ------------------------------------------------------------
@@ -326,7 +330,7 @@ module.exports = {
         { key: 'general', name: '💬┃général', access: 'public' },
         { key: 'media', name: '📸┃médias', access: 'public', topic: 'Screens, vidéos, clips' },
         { key: 'suggestions', name: '💡┃suggestions', access: 'readonly', topic: 'Propose tes idées avec /suggestion' },
-        { key: 'botCommands', name: '🤖┃commandes-bot', access: 'public' },
+        { key: 'botCommands', name: '🤖┃commandes-bot', access: 'public', topic: 'Toutes les commandes du bot se font ici (liste épinglée)' },
         { key: 'invites', name: '📨┃invitations', access: 'readonly', topic: 'Invite tes amis et gagne des pièces en jeu ! (/lier puis /invitations)' },
         { key: 'boosters', name: '🚀┃boosters', access: 'readonly', topic: 'Merci à nos boosters ! 1 boost = 1 mois de VIP en jeu' },
       ],
@@ -335,8 +339,8 @@ module.exports = {
       key: 'catGames', name: '🎮 MINI-JEUX',
       channels: [
         { key: 'gamesTalk', name: '🎮┃discussion-jeux', access: 'public' },
-        { key: 'leaderboards', name: '🏅┃classements', access: 'readonly', topic: 'Classements et records' },
-        { key: 'tournaments', name: '🏆┃tournois', access: 'readonly', topic: 'Inscriptions aux tournois' },
+        { key: 'leaderboards', name: '🏅┃classements', access: 'readonly', topic: 'Top des votes, des mini-jeux et des niveaux (mis à jour automatiquement)' },
+        { key: 'votes', name: '🗳️┃votes', access: 'readonly', topic: 'Vote pour le serveur et gagne des récompenses en jeu' },
         { key: 'lfg', name: '🔎┃recherche-équipe', access: 'public', topic: 'Utilise /lfg pour trouver des joueurs' },
         { key: 'spoilers', name: '👀┃spoilers', access: 'readonly', topic: 'Avant-premières : images et vidéos des mini-jeux et des maps' },
         { key: 'bugs', name: '🐛┃bugs', access: 'public', topic: 'Signale les bugs rencontrés en jeu' },

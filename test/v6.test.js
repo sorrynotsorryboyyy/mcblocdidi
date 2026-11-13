@@ -100,7 +100,9 @@ test('routes publiques : top voteurs sans UUID, CORS limité au site, /api toujo
   }
 });
 
-test('classements : panneau des votes ajouté aux panneaux des jeux', () => {
-  assert.equal(leaderboards.VOTES_BOARD.server, 'votes');
-  assert.equal(leaderboards.title(leaderboards.VOTES_BOARD), '🏆 Classement des votes du mois');
+test('classements : les votes du mois font partie du panneau unique', () => {
+  const json = leaderboards.panelPayload({ leaderboards: { votes: { boards: [{ key: 'month', entries: [{ uuid: 'u', name: 'Steve', value: 4 }] }] } } })
+    .embeds[0].toJSON();
+  assert.match(json.fields[0].name, /Votes du mois/);
+  assert.match(json.fields[0].value, /Steve\*\* — 4 votes/);
 });

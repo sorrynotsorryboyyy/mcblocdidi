@@ -12,6 +12,7 @@
 //   POST /public/site-link/code     → { code, token, expiresAt }                (liaison du site ; 5 par IP / 10 min)
 //   GET  /public/site-link/status   → { status, account? }                       (Authorization: Bearer <token du site>)
 //   DELETE /public/site-link        → { ok }                                     (délier ; même jeton)
+//   POST /api/votes                 ← { id, name, site, monthly, milestone? }      (vote récompensé → #votes)
 //   POST /api/site-link             ← { code, uuid, name }                       (/site <code> en jeu)
 //   GET  /api/site-profiles/wanted  → { uuids }      POST /api/site-profiles ← { profiles: [...] }
 //
@@ -29,6 +30,7 @@ const gameSanctions = require('../utils/gameSanctions');
 const linkedRole = require('../utils/linkedRole');
 const db = require('../utils/db');
 const siteLinks = require('../utils/siteLinks');
+const voteFeed = require('../utils/voteFeed');
 
 const MAX_BODY = 64 * 1024; // classements : ~10 Ko
 
@@ -161,6 +163,13 @@ function createServer(client, secret) {
         const body = await readJson(req);
         const posted = await gameSanctions.handle(client, body);
         return send(res, 200, { ok: true, posted });
+      }
+
+      // Vote récompensé en jeu → annonce groupée dans #votes
+      if (req.method === 'POST' && url.pathname === '/api/votes') {
+        const body = await readJson(req);
+        const result = voteFeed.enqueue(client, body);
+        return send(res, result.ok ? 200 : 400, result);
       }
 
       if (req.method === 'GET' && url.pathname === '/api/rewards/pending') {

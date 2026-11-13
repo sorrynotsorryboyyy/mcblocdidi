@@ -110,10 +110,10 @@ test('classements : nettoyage des données du proxy et panneau', () => {
   ] }] }, { pas: 'un jeu' }] });
   assert.deepEqual(Object.keys(clean), ['piggywars']);
   assert.deepEqual(clean.piggywars.boards[0].entries, [{ uuid: 'aaa', name: 'Steve', value: 12 }]);
-  const game = config.minigames.find((g) => g.server === 'piggywars');
-  const json = lb.panelPayload(game, clean.piggywars, { d1: { uuid: 'aaa', name: 'Steve' } }).embeds[0].toJSON();
-  assert.equal(json.title, lb.title(game));
-  assert.match(json.fields[0].value, /Steve\*\* 🔗/);
+  const json = lb.panelPayload({ leaderboards: clean }, { d1: { uuid: 'aaa', name: 'Steve' } }).embeds[0].toJSON();
+  assert.equal(json.title, lb.PANEL_TITLE);
+  const piggy = json.fields.find((f) => f.name.includes('Piggy Wars'));
+  assert.match(piggy.value, /Steve\*\* 🔗/);
   assert.deepEqual(lb.sanitize(null), {});
 });
 

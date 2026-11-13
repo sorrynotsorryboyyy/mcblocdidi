@@ -60,6 +60,12 @@ function infoPanel(guild) {
         value: config.minigames.map((g) => `${g.emoji} **${g.name}** — ${g.description}`).join('\n').slice(0, 1024) || '—',
         inline: false,
       },
+      {
+        name: '🤖 Commandes et votes',
+        value: `Toutes les commandes du bot se font dans ${getChannel(guild, 'botCommands') ?? '#commandes-bot'} (la liste y est épinglée).\n`
+          + `🗳️ Vote pour le serveur dans ${getChannel(guild, 'votes') ?? '#votes'} et gagne des récompenses en jeu !`,
+        inline: false,
+      },
     )
     .setThumbnail(guild.iconURL());
 
@@ -292,40 +298,9 @@ function leaveEmbed(member) {
     .setDescription(`👋 **${member.user.tag}** a quitté le serveur. Nous sommes maintenant **${member.guild.memberCount}**.`);
 }
 
-// ---------- Mini-jeux ----------
-
-function tournamentMessage(t, guild) {
-  const game = config.minigames.find((g) => g.id === t.game);
-  const list = t.participants.length
-    ? t.participants.map((id, i) => `\`${String(i + 1).padStart(2, '0')}\` <@${id}>`).join('\n').slice(0, 1024)
-    : '*Aucun inscrit pour le moment.*';
-  const full = t.participants.length >= t.slots;
-
-  const embed = base(t.closed ? colors.neutral : colors.warning)
-    .setTitle(`🏆 Tournoi ${game ? `${game.emoji} ${game.name}` : t.game}${t.closed ? ' — Inscriptions closes' : ''}`)
-    .setDescription(t.description || 'Inscris-toi avec le bouton ci-dessous !')
-    .addFields(
-      { name: '📅 Date', value: t.date, inline: true },
-      { name: '👥 Places', value: `${t.participants.length} / ${t.slots}`, inline: true },
-      { name: '🎙️ Organisé par', value: `<@${t.createdBy}>`, inline: true },
-      { name: '📋 Inscrits', value: list },
-    );
-  if (guild?.iconURL()) embed.setThumbnail(guild.iconURL());
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`tournoi_join:${t.id}`).setLabel(full ? 'Complet' : 'S\'inscrire').setEmoji('✅')
-      .setStyle(ButtonStyle.Success).setDisabled(t.closed || full),
-    new ButtonBuilder().setCustomId(`tournoi_leave:${t.id}`).setLabel('Se désinscrire').setEmoji('❌')
-      .setStyle(ButtonStyle.Secondary).setDisabled(t.closed),
-    new ButtonBuilder().setCustomId(`tournoi_close:${t.id}`).setLabel(t.closed ? 'Rouvrir' : 'Clôturer').setEmoji('🔒')
-      .setStyle(ButtonStyle.Danger),
-  );
-  return { embeds: [embed], components: [row] };
-}
-
 module.exports = {
   base, success, error, ip,
   rulesPanel, verifyPanel, infoPanel, statusEmbed, rolesPanel, ticketPanel,
-  welcomeEmbed, welcomeDm, leaveEmbed, tournamentMessage, suggestionMessage, giveawayMessage,
+  welcomeEmbed, welcomeDm, leaveEmbed, suggestionMessage, giveawayMessage,
   partnerMessage, partnersAdminPanel,
 };

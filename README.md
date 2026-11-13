@@ -1,7 +1,7 @@
 # 🎮 Bot Discord — MCBLOC (réseau Minecraft mini-jeux)
 
 Bot Discord (discord.js v14) qui **configure tout le serveur en une commande** et le relie au réseau Minecraft :
-statut en direct, vérification, rôles, tickets, modération + auto-mod, suggestions, giveaways, tournois, LFG,
+statut en direct, vérification, rôles, tickets, modération + auto-mod, suggestions, giveaways, votes,
 partenaires, **parrainage récompensé en pièces** et **VIP en jeu pour chaque boost**.
 
 ---
@@ -97,7 +97,7 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 
 - `/setup` **active la Communauté** : niveau de vérification ≥ faible, filtre de contenu pour tous, notifications « mentions seulement », #règles comme salon des règles, **#📣┃discord-updates** (staff) pour les messages de Discord. **#📢┃annonces** devient un salon d'annonces suivable (les annonces du bot sont publiées automatiquement).
 - **Âge** : dans #vérification, le membre accepte le règlement avec « -18 ans » ou « +18 ans ». Les membres déjà vérifiés choisissent leur âge dans #rôles (menu « Ton âge »).
-- **Notifications** (#rôles) : 🔔 Annonces, 🆕 Mises à jour, 🛠️ Statut serveur (redémarrage du serveur), 🏆 Tournois, 🎉 Events, 🎁 Giveaways (mentionné à chaque /giveaway), 📊 Sondages, + un rôle par mini-jeu.
+- **Notifications** (#rôles) : 🔔 Annonces, 🆕 Mises à jour, 🛠️ Statut serveur (redémarrage du serveur), 🎉 Events, 🎁 Giveaways (mentionné à chaque /giveaway), 📊 Sondages, + un rôle par mini-jeu.
 - `/embed mention:@rôle` : publie un embed en mentionnant un rôle (ex. 🆕 Mises à jour).
 - **#👀┃spoilers** (MINI-JEUX) : avant-premières, seul le staff publie.
 
@@ -110,7 +110,9 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 | **Guide en MP** | envoyé automatiquement à chaque nouveau membre (une seule fois) |
 | **Compte lié** | après `/lier` : rôle 🔗 Compte lié + surnom = pseudo Minecraft |
 | **Niveaux** | XP en écrivant (1×/min) et en vocal (≥ 2 personnes). Paliers 5/10/20/35 → rôles 🌱 🔥 ⚡ 👑 + pièces. `/niveau`, `/top` |
-| **Classements** | #classements : top 10 Piggy Wars / SumoGames / CoreWars (envoyés par le proxy toutes les 5 min) + 🏅 Top Discord |
+| **Classements** | #classements : **un seul embed** mis à jour tout seul — top 5 des votes du mois, de Piggy Wars / SumoGames / CoreWars (victoires, envoyés par le proxy toutes les 5 min) et des niveaux Discord |
+| **Votes** | #votes : panneau fixe (sites de vote, récompenses, paliers) + une annonce par vote (regroupées toutes les 15 s), envoyée par le proxy |
+| **Commandes** | Les joueurs utilisent les commandes **uniquement dans #commandes-bot** (liste épinglée) ; le staff partout. Les commandes staff sont cachées aux joueurs |
 | **/daily** | 100 pièces/jour (compte lié), +20 %/jour de série (max +100 %) |
 | **/sondage** | `question`, `choix:Oui | Non | Peut-être`, `duree:1h`, résultats en direct |
 | **Anti-raid** | ≥ 10 arrivées en 30 s → invitations en pause + vérification élevée + alerte staff, 15 min. `/lockdown on/off/statut` |
@@ -124,12 +126,12 @@ Tous les montants et seuils se règlent dans `config.js` (`launch`, `levels`, `d
 
 | Commande | Description | Qui |
 |---|---|---|
-| `/help`, `/ping`, `/ip`, `/status`, `/jeux` | Infos | Tous |
+| `/help`, `/ip` | Infos | Tous |
+| `/ping` | Latence du bot | Staff |
 | `/vote` | Sites de vote (Aevum en partenaire), récompenses et paliers du mois | Tous |
 | `/lier`, `/delier`, `/compte` | Liaison Minecraft, récompenses | Tous |
-| `/invitations [membre]` | Invitations et classement | Tous |
-| `/suggestion`, `/lfg` | Idées, recherche de joueurs | Tous |
-| `/tournoi`, `/giveaway`, `/embed` | Événements | Staff |
+| `/suggestion` | Proposer une idée | Tous |
+| `/giveaway`, `/embed` | Événements | Staff |
 | `/ban`, `/unban`, `/kick`, `/mute`, `/unmute`, `/warn`, `/warns`, `/clear` | Modération | Modérateurs |
 | `/setup` | Configure / met à jour le serveur | Admin |
 

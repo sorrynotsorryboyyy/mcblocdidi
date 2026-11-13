@@ -3,6 +3,7 @@ const path = require('node:path');
 const { Events } = require('discord.js');
 const { replyEphemeral } = require('../utils/helpers');
 const { error } = require('../utils/embeds');
+const { commandAllowed } = require('../utils/guide');
 
 // Handlers de composants : chaque fichier exporte { prefixes: [...], handle(interaction, arg) }
 // Le customId est de la forme "prefix" ou "prefix:argument".
@@ -26,6 +27,11 @@ module.exports = {
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) return replyEphemeral(interaction, 'Commande inconnue. Relance `npm run deploy`.');
+        // Les joueurs utilisent les commandes uniquement dans #commandes-bot (le staff partout)
+        const place = commandAllowed(interaction);
+        if (!place.ok) {
+          return replyEphemeral(interaction, `🤖 Les commandes se font dans ${place.channel} 👉 tu y trouveras aussi la liste de toutes les commandes.`);
+        }
         return await cmd.execute(interaction, client);
       }
 
