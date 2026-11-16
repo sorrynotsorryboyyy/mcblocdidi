@@ -10,7 +10,7 @@ const MAX_SECTIONS = 12;
 const ID_RE = /^[a-z0-9_-]{1,32}$/;
 // Limites Discord : 4096 (description), 1024 (champ), 25 champs, 6000 caractères par message.
 const MESSAGE_BUDGET = 5800;
-const SECTION_EMOJI = { reseau: '🌐', progression: '⭐', grades: '💎' };
+const SECTION_EMOJI = { reseau: '🌐', progression: '⭐', grades: '💎', cosmetiques: '🎨' };
 
 const text = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const list = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);
@@ -85,7 +85,10 @@ function fit(lines, max, more = (n) => `*… et ${n} de plus : /guide en jeu*`) 
 
 /** Une ligne de tableau : « **Rôdeur** — PV : 20 · Dégâts : 3 ». */
 function rowLine(table, row) {
-  const rest = row.slice(1).map((v, i) => `${table.columns[i + 1]} : ${v}`).join(' · ');
+  // Colonnes « _… » (ex. « _icon ») : données pour le site, jamais affichées.
+  const rest = row.slice(1).map((v, i) => [table.columns[i + 1], v])
+    .filter(([column]) => !column.startsWith('_'))
+    .map(([column, v]) => `${column} : ${v}`).join(' · ');
   return `• **${row[0]}**${rest ? ` — ${rest}` : ''}`;
 }
 
@@ -96,7 +99,9 @@ function rowLine(table, row) {
 function sectionPayload(section) {
   const main = base(config.colors.primary).setTitle(titleOf(section));
   const rules = section.rules.map((r) => `• ${r}`);
-  main.setDescription(fit([section.summary, '', ...rules].filter((l, i) => i > 0 || l), 3000));
+  // Discord refuse une description vide : présentation et règles seulement si elles existent.
+  const description = fit([section.summary, ...(section.summary && rules.length ? [''] : []), ...rules].filter((l, i) => i > 0 || l), 3000).trim();
+  if (description) main.setDescription(description);
   if (section.commands.length) {
     main.addFields({ name: '⌨️ Commandes', value: fit(section.commands.map((c) => `\`${c.syntax}\` — ${c.description}`), 1000) });
   }

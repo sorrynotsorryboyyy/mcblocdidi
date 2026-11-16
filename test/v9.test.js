@@ -102,6 +102,17 @@ test('commandes : /guide existe, choix du réseau, de la progression et de chaqu
   const cmd = commands.get('guide');
   assert.ok(cmd, '/guide chargée');
   const choices = cmd.data.toJSON().options[0].choices.map((c) => c.value);
-  assert.deepEqual(choices, ['reseau', 'progression', 'grades', 'piggywars', 'sumotower', 'corewars', 'wildfarm']);
+  assert.deepEqual(choices, ['reseau', 'progression', 'grades', 'cosmetiques', 'piggywars', 'sumotower', 'corewars', 'wildfarm']);
   assert.ok(guide.PLAYER_COMMAND_NAMES.has('guide'), 'commande joueur (autorisée dans #commandes-bot)');
+});
+
+test('guide : les colonnes « _… » (données pour le site) ne sont jamais affichées sur Discord', () => {
+  const [section] = gameGuide.sanitize({ sections: [{
+    id: 'cosmetiques', title: 'Cosmétiques', order: 3,
+    tables: [{ title: 'Particules', columns: ['Cosmétique', 'Rareté', '_icon'], rows: [['Flammes', 'Épique', 'blaze_powder']] }],
+  }] }).sections;
+  const text = JSON.stringify(gameGuide.sectionPayload(section).embeds.map((e) => e.toJSON()));
+  assert.match(text, /Flammes/);
+  assert.match(text, /Rareté : Épique/);
+  assert.doesNotMatch(text, /blaze_powder|_icon/);
 });
