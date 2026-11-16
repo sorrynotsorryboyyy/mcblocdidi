@@ -70,7 +70,7 @@ function panelPayload(state, links = {}, levelsTop = [], votesChannelId = null) 
     .addFields({ name: '🗳️ Votes du mois', value: lines(boardOf(boards.votes, 'month')?.entries, byUuid, ' votes'), inline: false });
 
   for (const game of config.minigames) {
-    embed.addFields({ name: `${game.emoji} ${game.name} — victoires`, value: lines(boardOf(boards[game.server], 'wins')?.entries, byUuid), inline: true });
+    embed.addFields({ name: `${game.emoji} ${game.name} — ${game.winsLabel ?? 'victoires'}`, value: lines(boardOf(boards[game.server], 'wins')?.entries, byUuid), inline: true });
   }
 
   embed.addFields({

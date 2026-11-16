@@ -11,6 +11,7 @@ const monitor = require('../utils/monitor');
 const backup = require('../utils/backup');
 const leaderboards = require('../utils/leaderboards');
 const guide = require('../utils/guide');
+const gameGuide = require('../utils/gameGuide');
 const { registerCommands } = require('../utils/commands');
 const db = require('../utils/db');
 
@@ -39,6 +40,7 @@ module.exports = {
       await boosts.refreshBoard(guild);
       await leaderboards.refreshPanels(guild);
       await guide.refreshPanels(guild); // #votes et #commandes-bot (si les salons existent)
+      await gameGuide.refreshPanels(guild); // #guide (dernier guide reçu du serveur)
     }
   },
 };

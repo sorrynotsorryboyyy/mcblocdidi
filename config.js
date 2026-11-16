@@ -229,6 +229,11 @@ module.exports = {
       id: 'corewars', name: 'CoreWars', emoji: '🔮', formerIds: ['fallen-clan'], server: 'corewars',
       description: 'Rouge vs Bleu, jusqu\'à 10v10 — construis, défends et détruis le cœur de la base ennemie !',
     },
+    {
+      // winsLabel : ce que compte le classement « wins » de ce jeu dans #classements (défaut : victoires).
+      id: 'wildfarm', name: 'WildFarm', emoji: '🧟', server: 'wildfarm', winsLabel: 'extractions',
+      description: 'Raids d\'extraction, ouvert 24h/24 — pille la map, survis aux zombies et aux joueurs, puis extrais-toi avec ton butin !',
+    },
   ],
 
   // ------------------------------------------------------------
@@ -309,6 +314,7 @@ module.exports = {
       key: 'catInfo', name: '📌 INFORMATIONS',
       channels: [
         { key: 'rules', name: '📜┃règles', access: 'rules', topic: 'Les règles du serveur' },
+        { key: 'guide', name: '📖┃guide', access: 'readonly', topic: 'Règles, commandes et chiffres de chaque jeu (mis à jour automatiquement depuis le serveur)' },
         // announcement: true → converti en salon d'annonces (suivable) une fois la Communauté activée
         { key: 'announcements', name: '📢┃annonces', access: 'readonly', topic: 'Annonces officielles', announcement: true },
         { key: 'info', name: 'ℹ️┃infos-serveur', access: 'readonly', topic: 'IP, version et liens utiles' },

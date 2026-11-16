@@ -27,7 +27,8 @@ test('classement unique : top 5 par catégorie, catégories vides, niveaux Disco
   assert.equal(field(/Piggy Wars/).value.split('\n').length, 3);
   assert.match(field(/SumoGames/).value, /Personne pour le moment/);
   assert.match(field(/Niveaux Discord/).value, /<@111> — niveau \*\*12\*\*/);
-  assert.equal(json.fields.length, 5, 'votes + 3 jeux + niveaux : un seul embed');
+  assert.equal(json.fields.length, 6, 'votes + 4 jeux + niveaux : un seul embed');
+  assert.match(field(/WildFarm/).name, /extractions/, 'WildFarm compte les extractions, pas des victoires');
 });
 
 test('annonces de vote : validation, une ligne par vote, regroupement au-delà de 5, palier', () => {

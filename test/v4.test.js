@@ -14,7 +14,7 @@ test('pied de page « MCBLOC • play.mcbloc.fr »', () => {
 });
 
 test('mini-jeux : SumoGames remplace Sumo Tower, anciens ids reconnus', () => {
-  assert.deepEqual(config.minigames.map((g) => g.id), ['piggy-wars', 'sumogames', 'corewars']);
+  assert.deepEqual(config.minigames.map((g) => g.id), ['piggy-wars', 'sumogames', 'corewars', 'wildfarm']);
   assert.equal(findGame('sumo-tower').name, 'SumoGames');
   assert.equal(findGame('fallen-clan').name, 'CoreWars');
   assert.equal(findGame('inconnu'), null);

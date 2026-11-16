@@ -13,6 +13,8 @@
 //   GET  /public/site-link/status   → { status, account? }                       (Authorization: Bearer <token du site>)
 //   DELETE /public/site-link        → { ok }                                     (délier ; même jeton)
 //   POST /api/votes                 ← { id, name, site, monthly, milestone? }      (vote récompensé → #votes)
+//   POST /api/guide                 ← { hash, sections: [{ id, title, summary, rules, commands, tables }] } (→ #guide)
+//   GET  /public/guide              → { hash, updatedAt, sections }             (sans auth, CORS : PUBLIC_ORIGINS)
 //   POST /api/site-link             ← { code, uuid, name }                       (/site <code> en jeu)
 //   GET  /api/site-profiles/wanted  → { uuids }      POST /api/site-profiles ← { profiles: [...] }
 //
@@ -26,6 +28,7 @@ const { base } = require('../utils/embeds');
 const { sendLog } = require('../utils/logger');
 const monitor = require('../utils/monitor');
 const leaderboards = require('../utils/leaderboards');
+const gameGuide = require('../utils/gameGuide');
 const gameSanctions = require('../utils/gameSanctions');
 const linkedRole = require('../utils/linkedRole');
 const db = require('../utils/db');
@@ -33,6 +36,7 @@ const siteLinks = require('../utils/siteLinks');
 const voteFeed = require('../utils/voteFeed');
 
 const MAX_BODY = 64 * 1024; // classements : ~10 Ko
+const GUIDE_MAX_BODY = 1024 * 1024; // guide des jeux : tous les tableaux de chiffres (~100 Ko)
 
 function send(res, status, body, headers = {}) {
   const json = JSON.stringify(body);
@@ -93,13 +97,13 @@ function authorized(req, secret) {
   return given.length === expected.length && crypto.timingSafeEqual(given, expected);
 }
 
-function readJson(req) {
+function readJson(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY) { reject(new Error('too-large')); req.destroy(); return; }
+      if (size > max) { reject(new Error('too-large')); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => {
@@ -122,6 +126,7 @@ function createServer(client, secret) {
         if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
         if (req.method === 'GET' && url.pathname === '/public/votes') return send(res, 200, leaderboards.topVoters(), cors);
         if (req.method === 'GET' && url.pathname === '/public/leaderboards') return send(res, 200, publicLeaderboards(), cors);
+        if (req.method === 'GET' && url.pathname === '/public/guide') return send(res, 200, gameGuide.publicGuide(), cors);
 
         // Liaison du site (le navigateur garde un jeton secret, envoyé en "Authorization: Bearer")
         if (req.method === 'POST' && url.pathname === '/public/site-link/code') {
@@ -137,6 +142,14 @@ function createServer(client, secret) {
       if (!secret) return send(res, 503, { error: 'bridge-disabled' });
       if (!authorized(req, secret)) return send(res, 401, { error: 'unauthorized' });
       monitor.markSeen(); // le proxy est vivant
+
+      if (req.method === 'POST' && url.pathname === '/api/guide') {
+        const body = await readJson(req, GUIDE_MAX_BODY);
+        const sections = gameGuide.store(body);
+        // #guide mis à jour en arrière-plan (le proxy n'attend pas Discord) ; seules les sections changées sont éditées
+        for (const guild of client.guilds.cache.values()) gameGuide.refreshPanels(guild).catch(() => null);
+        return send(res, 200, { ok: true, sections });
+      }
 
       if (req.method === 'POST' && url.pathname === '/api/leaderboards') {
         const body = await readJson(req);

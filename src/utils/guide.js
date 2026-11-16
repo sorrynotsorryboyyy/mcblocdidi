@@ -13,6 +13,7 @@ const PLAYER_COMMANDS = [
     commands: [
       { name: 'ip', text: 'L\'adresse pour rejoindre le serveur Minecraft' },
       { name: 'vote', text: 'Voter pour le serveur et gagner des pièces et des coffres' },
+      { name: 'guide', text: 'Règles, commandes et chiffres de chaque jeu (aussi dans #guide)' },
     ],
   },
   {

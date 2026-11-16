@@ -21,7 +21,7 @@ test('network.json : liens, version, descriptions et règles Discord appliqués'
   assert.equal(cfg.discordInvite, 'https://discord.mcbloc.fr');
   assert.equal(cfg.minecraft.version, '1.8 – 1.21');
   // Les ids, noms et salons des jeux ne changent pas, seules les descriptions sont reprises
-  assert.deepEqual(cfg.minigames.map((g) => g.id), ['piggy-wars', 'sumogames', 'corewars']);
+  assert.deepEqual(cfg.minigames.map((g) => g.id), ['piggy-wars', 'sumogames', 'corewars', 'wildfarm']);
   assert.match(cfg.minigames[0].description, /cochons/);
   assert.ok(cfg.rules.length >= 5);
   assert.ok(cfg.rules.some((r) => r.includes('salons')), 'règle propre au Discord présente');

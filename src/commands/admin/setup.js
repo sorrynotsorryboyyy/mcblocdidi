@@ -15,6 +15,7 @@ const invites = require('../../utils/invites');
 const boosts = require('../../utils/boosts');
 const levels = require('../../utils/levels');
 const leaderboards = require('../../utils/leaderboards');
+const gameGuide = require('../../utils/gameGuide');
 const launch = require('../../utils/launch');
 const linkedRole = require('../../utils/linkedRole');
 const guide = require('../../utils/guide');
@@ -333,6 +334,7 @@ module.exports = {
     duplicates += (await launch.refreshPanel(guild).catch(() => 0)) ?? 0;
     duplicates += await guide.refreshPanels(guild); // #votes et #commandes-bot
     await leaderboards.refreshPanels(guild, true);
+    await gameGuide.refreshPanels(guild, true); // #guide (si le serveur Minecraft a déjà publié le guide)
     const relinked = await linkedRole.repairAll(guild);
 
     // Messages système Discord (boosts) → #logs (staff) : ils déclenchent la récompense,
