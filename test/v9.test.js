@@ -102,6 +102,6 @@ test('commandes : /guide existe, choix du réseau, de la progression et de chaqu
   const cmd = commands.get('guide');
   assert.ok(cmd, '/guide chargée');
   const choices = cmd.data.toJSON().options[0].choices.map((c) => c.value);
-  assert.deepEqual(choices, ['reseau', 'progression', 'piggywars', 'sumotower', 'corewars', 'wildfarm']);
+  assert.deepEqual(choices, ['reseau', 'progression', 'grades', 'piggywars', 'sumotower', 'corewars', 'wildfarm']);
   assert.ok(guide.PLAYER_COMMAND_NAMES.has('guide'), 'commande joueur (autorisée dans #commandes-bot)');
 });

@@ -10,7 +10,7 @@ const MAX_SECTIONS = 12;
 const ID_RE = /^[a-z0-9_-]{1,32}$/;
 // Limites Discord : 4096 (description), 1024 (champ), 25 champs, 6000 caractères par message.
 const MESSAGE_BUDGET = 5800;
-const SECTION_EMOJI = { reseau: '🌐', progression: '⭐' };
+const SECTION_EMOJI = { reseau: '🌐', progression: '⭐', grades: '💎' };
 
 const text = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const list = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);

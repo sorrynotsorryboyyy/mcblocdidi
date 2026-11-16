@@ -7,6 +7,7 @@ const { base } = require('../../utils/embeds');
 const CHOICES = [
   { name: '🌐 Réseau (règles, commandes)', value: 'reseau' },
   { name: '⭐ Progression (pièces, niveaux, coffres)', value: 'progression' },
+  { name: '💎 Grades (prix et avantages)', value: 'grades' },
   ...config.minigames.slice(0, 20).map((g) => ({ name: `${g.emoji} ${g.name}`, value: g.server })),
 ];
 
