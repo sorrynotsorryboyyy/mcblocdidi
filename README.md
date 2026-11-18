@@ -21,7 +21,7 @@ partenaires, **parrainage récompensé en pièces** et **VIP en jeu pour chaque 
 | `INVITE_REWARD` | *(optionnel)* pièces par invitation validée, 500 par défaut |
 | `MC_HOST` / `MC_PORT` | *(optionnel)* IP du serveur Minecraft |
 | `NETWORK_URL` | *(optionnel)* infos publiques du réseau, `https://mcbloc.fr/network.json` par défaut (liens, jeux, règles, votes) |
-| `TEBEX_PUBLIC_TOKEN`, `TEBEX_WEBSTORE_ID`, `TEBEX_PRIVATE_KEY`, `TEBEX_WEBHOOK_SECRET`, `TEBEX_DYNAMIC_CATEGORY` | *(boutique)* clés Tebex : **uniquement ici**, jamais dans le code ni sur le site. Voir « Boutique Tebex » |
+| `TEBEX_PUBLIC_TOKEN`, `TEBEX_PRIVATE_KEY`, `TEBEX_WEBHOOK_SECRET`, `TEBEX_DYNAMIC_CATEGORY` | *(boutique)* clés Tebex : **uniquement ici**, jamais dans le code ni sur le site. Voir « Boutique Tebex » |
 | `PUBLIC_ORIGINS` | *(optionnel)* sites autorisés à lire `/public/votes`, `/public/leaderboards` et `/public/guide`, `https://mcbloc.fr,https://www.mcbloc.fr` par défaut |
 
 ### 2. Volume (indispensable)
@@ -88,7 +88,7 @@ identifiants d'articles, jamais de prix).
 - Achats : `$DATA_DIR/shop.json` ; en jeu : tables `mcbloc_purchases`, `mcbloc_boosters`, `mcbloc_network_booster`.
 
 **Configuration Tebex** (une fois) : catégorie de type *dynamic* (son id → `TEBEX_DYNAMIC_CATEGORY`) ; jeton public,
-identifiant de boutique et clé privée (Integrations → Headless / Checkout API) ; webhook vers
+clé privée (creator.tebex.io/developers/api-keys) ; webhook vers
 `https://<domaine-railway>/tebex/webhook` avec `payment.completed`, `payment.refunded`, `payment.dispute.*`, puis « Validate ».
 
 ## 🎁 Parrainage et boosts

@@ -2,8 +2,7 @@
 //
 // Secrets : UNIQUEMENT dans les variables Railway (jamais dans le code ni sur le site) :
 //   TEBEX_PUBLIC_TOKEN      jeton public de la boutique (webstore)
-//   TEBEX_WEBSTORE_ID       identifiant de la boutique (authentification des paquets dynamiques)
-//   TEBEX_PRIVATE_KEY       clé privée (Checkout / Headless API key)
+//   TEBEX_PRIVATE_KEY       clé privée (creator.tebex.io/developers/api-keys) ; authentification = jeton public + clé privée
 //   TEBEX_WEBHOOK_SECRET    secret des webhooks (signature)
 //   TEBEX_DYNAMIC_CATEGORY  identifiant de la catégorie « dynamic »
 //
@@ -17,7 +16,6 @@ const DEFAULT_WEBHOOK_IPS = ['18.209.80.3', '54.87.231.232'];
 function settings(env = process.env) {
   return {
     token: (env.TEBEX_PUBLIC_TOKEN ?? '').trim(),
-    webstore: (env.TEBEX_WEBSTORE_ID ?? '').trim(),
     privateKey: (env.TEBEX_PRIVATE_KEY ?? '').trim(),
     webhookSecret: (env.TEBEX_WEBHOOK_SECRET ?? '').trim(),
     category: (env.TEBEX_DYNAMIC_CATEGORY ?? '').trim(),
@@ -27,7 +25,7 @@ function settings(env = process.env) {
 
 /** Tous les secrets nécessaires sont-ils présents ? */
 function configured(s = settings()) {
-  return !!(s.token && s.webstore && s.privateKey && s.webhookSecret && /^\d+$/.test(s.category));
+  return !!(s.token && s.privateKey && s.webhookSecret && /^\d+$/.test(s.category));
 }
 
 // ------------------------------------------------------------------ webhooks
@@ -65,7 +63,7 @@ async function call(fetchImpl, method, path, { body } = {}) {
   const headers = { Accept: 'application/json', 'User-Agent': 'mcblocdidi' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   // Tous les appels partent du bot (jamais du navigateur) : authentification privée systématique, exigée par Tebex.
-  headers.Authorization = `Basic ${Buffer.from(`${s.webstore}:${s.privateKey}`).toString('base64')}`;
+  headers.Authorization = `Basic ${Buffer.from(`${s.token}:${s.privateKey}`).toString('base64')}`;
   const res = await fetchImpl(`${API}${path}`, {
     method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: globalThis.AbortSignal.timeout(15_000),
   });

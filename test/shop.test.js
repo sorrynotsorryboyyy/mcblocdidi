@@ -10,7 +10,7 @@ const { createServer } = require('../src/api/server');
 
 const SECRET_WEBHOOK = 'secret-webhook-de-test';
 Object.assign(process.env, {
-  TEBEX_PUBLIC_TOKEN: 'tok', TEBEX_WEBSTORE_ID: 'store', TEBEX_PRIVATE_KEY: 'key',
+  TEBEX_PUBLIC_TOKEN: 'tok', TEBEX_PRIVATE_KEY: 'key',
   TEBEX_WEBHOOK_SECRET: SECRET_WEBHOOK, TEBEX_DYNAMIC_CATEGORY: '123',
 });
 
