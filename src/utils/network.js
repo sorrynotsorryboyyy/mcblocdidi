@@ -60,6 +60,14 @@ function apply(cfg, data) {
       })),
     milestones: Array.isArray(data.votes?.milestones) ? data.votes.milestones : [],
   };
+
+  // Boutique : interrupteur + prix (lus par src/utils/shop.js pour créer les articles Tebex). Validés là-bas.
+  cfg.shop = {
+    open: data.shop?.open === true,
+    ranks: Array.isArray(data.ranks) ? data.ranks : [],
+    coinPacks: Array.isArray(data.coinPacks) ? data.coinPacks : [],
+    boosters: Array.isArray(data.boosters) ? data.boosters : [],
+  };
   return true;
 }
 

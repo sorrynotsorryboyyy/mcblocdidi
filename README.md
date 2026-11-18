@@ -21,7 +21,8 @@ partenaires, **parrainage récompensé en pièces** et **VIP en jeu pour chaque 
 | `INVITE_REWARD` | *(optionnel)* pièces par invitation validée, 500 par défaut |
 | `MC_HOST` / `MC_PORT` | *(optionnel)* IP du serveur Minecraft |
 | `NETWORK_URL` | *(optionnel)* infos publiques du réseau, `https://mcbloc.fr/network.json` par défaut (liens, jeux, règles, votes) |
-| `PUBLIC_ORIGINS` | *(optionnel)* sites autorisés à lire `/public/votes` et `/public/leaderboards`, `https://mcbloc.fr,https://www.mcbloc.fr` par défaut |
+| `TEBEX_PUBLIC_TOKEN`, `TEBEX_WEBSTORE_ID`, `TEBEX_PRIVATE_KEY`, `TEBEX_WEBHOOK_SECRET`, `TEBEX_DYNAMIC_CATEGORY` | *(boutique)* clés Tebex : **uniquement ici**, jamais dans le code ni sur le site. Voir « Boutique Tebex » |
+| `PUBLIC_ORIGINS` | *(optionnel)* sites autorisés à lire `/public/votes`, `/public/leaderboards` et `/public/guide`, `https://mcbloc.fr,https://www.mcbloc.fr` par défaut |
 
 ### 2. Volume (indispensable)
 Clic droit sur le service → **Add Volume** → *Mount path* **`/data`**. Sans volume, le bot oublie tout à chaque mise à jour.
@@ -54,6 +55,41 @@ Le **proxy BungeeCord** interroge le bot toutes les 30 s (connexion sortante : a
 Chaque récompense a un identifiant unique : elle ne peut **jamais** être donnée deux fois, même en cas de coupure.
 
 ---
+
+## 📖 Guide des jeux (#guide, /guide)
+
+Le serveur Minecraft est la **seule source** : chaque serveur publie sa section (règles, commandes, chiffres tirés
+de sa config) et le proxy l'envoie au bot (`POST /api/guide`) quand elle change, et en entier toutes les heures.
+
+- **#guide** (catégorie INFORMATIONS, créé par `/setup`) : un message par section — Réseau, Progression, Grades,
+  Cosmétiques, Piggy Wars, SumoGames, CoreWars, WildFarm. Seules les sections qui changent sont éditées, sans doublon.
+  Les grands tableaux sont résumés (« … et N de plus : /guide en jeu »).
+- **`/guide <section>`** : la même section, visible seulement par le joueur.
+- **`GET /public/guide`** : le guide complet pour le site (pages mcbloc.fr/guide, catalogue des cosmétiques).
+- Colonnes « _… » (icônes, identifiants) : données pour le site, jamais affichées sur Discord.
+
+## 💳 Boutique Tebex (paiements de mcbloc.fr)
+
+La boutique est sur le site ; Tebex sert **uniquement à payer**. Aucun produit à créer dans Tebex : le bot crée au moment
+du paiement des « paquets dynamiques » avec le nom et le **prix de `network.json`** (le navigateur n'envoie que des
+identifiants d'articles, jamais de prix).
+
+| Étape | Route |
+|---|---|
+| Panier Tebex pour un pseudo (vérifié chez Mojang) | `POST /public/shop/basket` (10 par IP / 10 min) |
+| Articles + lien de paiement | `POST /public/shop/checkout` |
+| Paiement confirmé, remboursé, contesté | `POST /tebex/webhook` : IP Tebex (18.209.80.3, 54.87.231.232) **et** signature `X-Signature` obligatoires |
+
+- **Interrupteur unique** : `"shop": { "open": false }` dans `network.json` du site. Fermé = aucun panier créé, boutons désactivés.
+- **Livraison** : par le proxy, avec les récompenses (`/api/rewards/pending`). Identifiant fixe `tebex:<transaction>:<article>` :
+  jamais livré deux fois, même si Tebex renvoie le webhook. Joueur hors ligne : livré à sa connexion.
+- **Remboursement / litige** : retrait automatique (`tebex-revoke:…`) de ce qui a été livré, jamais plus (pièces jusqu'à 0)
+  + alerte dans #logs. Litige gagné : alerte seulement. **Jamais de sanction automatique.**
+- Achats : `$DATA_DIR/shop.json` ; en jeu : tables `mcbloc_purchases`, `mcbloc_boosters`, `mcbloc_network_booster`.
+
+**Configuration Tebex** (une fois) : catégorie de type *dynamic* (son id → `TEBEX_DYNAMIC_CATEGORY`) ; jeton public,
+identifiant de boutique et clé privée (Integrations → Headless / Checkout API) ; webhook vers
+`https://<domaine-railway>/tebex/webhook` avec `payment.completed`, `payment.refunded`, `payment.dispute.*`, puis « Validate ».
 
 ## 🎁 Parrainage et boosts
 
@@ -110,7 +146,7 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 | **Guide en MP** | envoyé automatiquement à chaque nouveau membre (une seule fois) |
 | **Compte lié** | après `/lier` : rôle 🔗 Compte lié + surnom = pseudo Minecraft |
 | **Niveaux** | XP en écrivant (1×/min) et en vocal (≥ 2 personnes). Paliers 5/10/20/35 → rôles 🌱 🔥 ⚡ 👑 + pièces. `/niveau`, `/top` |
-| **Classements** | #classements : **un seul embed** mis à jour tout seul — top 5 des votes du mois, de Piggy Wars / SumoGames / CoreWars (victoires, envoyés par le proxy toutes les 5 min) et des niveaux Discord |
+| **Classements** | #classements : **un seul embed** mis à jour tout seul — top 5 des votes du mois, de Piggy Wars / SumoGames / CoreWars (victoires) et WildFarm (extractions), envoyés par le proxy toutes les 5 min, et des niveaux Discord |
 | **Votes** | #votes : panneau fixe (sites de vote, récompenses, paliers) + une annonce par vote (regroupées toutes les 15 s), envoyée par le proxy |
 | **Commandes** | Les joueurs utilisent les commandes **uniquement dans #commandes-bot** (liste épinglée) ; le staff partout. Les commandes staff sont cachées aux joueurs |
 | **/daily** | 100 pièces/jour (compte lié), +20 %/jour de série (max +100 %) |
@@ -129,6 +165,7 @@ Tous les montants et seuils se règlent dans `config.js` (`launch`, `levels`, `d
 | `/help`, `/ip` | Infos | Tous |
 | `/ping` | Latence du bot | Staff |
 | `/vote` | Sites de vote (Aevum en partenaire), récompenses et paliers du mois | Tous |
+| `/guide <section>` | Règles, commandes et chiffres d'un jeu, des grades ou des cosmétiques | Tous |
 | `/lier`, `/delier`, `/compte` | Liaison Minecraft, récompenses | Tous |
 | `/suggestion` | Proposer une idée | Tous |
 | `/giveaway`, `/embed` | Événements | Staff |

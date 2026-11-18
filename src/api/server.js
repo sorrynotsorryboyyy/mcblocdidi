@@ -17,6 +17,9 @@
 //   GET  /public/guide              → { hash, updatedAt, sections }             (sans auth, CORS : PUBLIC_ORIGINS)
 //   POST /api/site-link             ← { code, uuid, name }                       (/site <code> en jeu)
 //   GET  /api/site-profiles/wanted  → { uuids }      POST /api/site-profiles ← { profiles: [...] }
+//   POST /public/shop/basket        ← { username }                  → { basket, player, auth }   (boutique ; 10 par IP / 10 min)
+//   POST /public/shop/checkout      ← { basket, items:[{id,qty}] }  → { checkout }   (prix = network.json, jamais le client)
+//   POST /tebex/webhook             ← webhook Tebex (IP Tebex + signature X-Signature obligatoires)
 //
 // Authentification : en-tête "Authorization: Bearer <BRIDGE_SECRET>".
 const http = require('node:http');
@@ -34,6 +37,8 @@ const linkedRole = require('../utils/linkedRole');
 const db = require('../utils/db');
 const siteLinks = require('../utils/siteLinks');
 const voteFeed = require('../utils/voteFeed');
+const shop = require('../utils/shop');
+const tebex = require('../utils/tebex');
 
 const MAX_BODY = 64 * 1024; // classements : ~10 Ko
 const GUIDE_MAX_BODY = 1024 * 1024; // guide des jeux : tous les tableaux de chiffres (~100 Ko)
@@ -64,16 +69,66 @@ const bearer = (req) => {
   return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
 };
 
-// Anti-abus : 5 codes de liaison par adresse IP toutes les 10 minutes.
-const codeRequests = new Map();
-function allowCode(req, now = Date.now()) {
-  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim();
-  const recent = (codeRequests.get(ip) ?? []).filter((t) => now - t < 10 * 60 * 1000);
-  if (recent.length >= 5) return false;
-  recent.push(now);
-  codeRequests.set(ip, recent);
-  if (codeRequests.size > 5000) codeRequests.clear();
-  return true;
+// Anti-abus par adresse IP, sur 10 minutes : 5 codes de liaison, 10 paniers de la boutique.
+function limiter(max) {
+  const requests = new Map();
+  return (req, now = Date.now()) => {
+    const ip = tebex.clientIp(req);
+    const recent = (requests.get(ip) ?? []).filter((t) => now - t < 10 * 60 * 1000);
+    if (recent.length >= max) return false;
+    recent.push(now);
+    requests.set(ip, recent);
+    if (requests.size > 5000) requests.clear();
+    return true;
+  };
+}
+const allowCode = limiter(5);
+const allowBasket = limiter(10);
+
+/** Corps brut (nécessaire pour vérifier la signature Tebex). */
+function readRaw(req, max = MAX_BODY) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > max) { reject(new Error('too-large')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+/** Alerte staff dans #logs de chaque serveur Discord. */
+async function staffAlert(client, text, color = config.colors.error) {
+  for (const guild of client.guilds.cache.values()) {
+    await sendLog(guild, base(color).setTitle('💳 Boutique').setDescription(text.slice(0, 4000))).catch(() => null);
+  }
+}
+
+/** Webhook Tebex : IP autorisée + signature valide, sinon refus sans rien traiter. */
+async function tebexWebhook(client, req, res) {
+  const s = tebex.settings();
+  if (!s.webhookSecret) return send(res, 503, { error: 'shop-disabled' });
+  if (!tebex.allowedIp(req, s)) return send(res, 403, { error: 'forbidden' });
+  const raw = await readRaw(req);
+  if (!tebex.validSignature(raw, req.headers['x-signature'], s.webhookSecret)) return send(res, 403, { error: 'bad-signature' });
+  let body;
+  try { body = JSON.parse(raw.toString('utf8')); } catch { return send(res, 400, { error: 'bad-json' }); }
+  const { reply, alerts } = shop.handleWebhook(body);
+  for (const text of alerts) await staffAlert(client, text);
+  if (body.type === 'payment.completed' && reply.queued) {
+    const name = body.subject?.customer?.username?.username ?? '?';
+    await staffAlert(client, `✅ Achat **${body.subject?.transaction_id}** de **${name}** : ${reply.queued} article(s) en cours de livraison.`, config.colors.success);
+  }
+  return send(res, 200, reply);
+}
+
+/** Erreur Tebex → réponse lisible pour le site (le détail reste dans les logs). */
+function shopError(res, cors, err) {
+  console.error('[boutique]', err.message);
+  return send(res, 502, { error: 'payment-unavailable' }, cors);
 }
 
 /** Classements pour le site : noms et valeurs seulement (pas d'UUID). */
@@ -118,6 +173,7 @@ function createServer(client, secret) {
     const url = new URL(req.url, 'http://localhost');
     try {
       if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, ready: client.isReady() });
+      if (req.method === 'POST' && url.pathname === '/tebex/webhook') return await tebexWebhook(client, req, res);
 
       // Routes publiques pour le site (mcbloc.fr) : aucun secret du pont, aucune UUID d'un autre joueur.
       if (url.pathname.startsWith('/public/')) {
@@ -135,6 +191,26 @@ function createServer(client, secret) {
         }
         if (req.method === 'GET' && url.pathname === '/public/site-link/status') return send(res, 200, siteLinks.status(bearer(req)), cors);
         if (req.method === 'DELETE' && url.pathname === '/public/site-link') return send(res, 200, { ok: siteLinks.unlink(bearer(req)) }, cors);
+
+        // Boutique : paiement Tebex (fermée tant que shop.open = false dans network.json)
+        if (req.method === 'GET' && url.pathname === '/public/shop/status') return send(res, 200, { open: shop.isOpen() }, cors);
+        if (req.method === 'POST' && url.pathname === '/public/shop/basket') {
+          if (!shop.isOpen()) return send(res, 403, { error: 'shop-closed' }, cors);
+          if (!allowBasket(req)) return send(res, 429, { error: 'too-many-requests' }, cors);
+          const body = await readJson(req);
+          try {
+            const result = await shop.startBasket({ username: String(body.username ?? ''), ip: tebex.clientIp(req) });
+            return send(res, result.status, result.body, cors);
+          } catch (err) { return shopError(res, cors, err); }
+        }
+        if (req.method === 'POST' && url.pathname === '/public/shop/checkout') {
+          if (!shop.isOpen()) return send(res, 403, { error: 'shop-closed' }, cors);
+          const body = await readJson(req);
+          try {
+            const result = await shop.checkout({ basket: body.basket, items: body.items });
+            return send(res, result.status, result.body, cors);
+          } catch (err) { return shopError(res, cors, err); }
+        }
         return send(res, 404, { error: 'not-found' }, cors);
       }
 
@@ -186,13 +262,19 @@ function createServer(client, secret) {
       }
 
       if (req.method === 'GET' && url.pathname === '/api/rewards/pending') {
-        return send(res, 200, { rewards: pendingForBridge() });
+        return send(res, 200, { rewards: [...pendingForBridge(), ...shop.pendingForBridge()] });
       }
 
       const ack = url.pathname.match(/^\/api\/rewards\/([^/]+)\/ack$/);
       if (req.method === 'POST' && ack) {
         const body = await readJson(req);
-        const result = await acknowledge(client, decodeURIComponent(ack[1]), body.ok === true, body.message);
+        const id = decodeURIComponent(ack[1]);
+        const bought = shop.acknowledge(id, body.ok === true, body.message);
+        if (bought) {
+          if (bought.failed) await staffAlert(client, `⚠️ Achat **${id}** (${bought.reward.name}) impossible à livrer : ${bought.reward.lastError}`);
+          return send(res, 200, { found: true, status: bought.status });
+        }
+        const result = await acknowledge(client, id, body.ok === true, body.message);
         return send(res, result.found ? 200 : 404, result);
       }
 
