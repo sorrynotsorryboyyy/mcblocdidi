@@ -1,16 +1,16 @@
-// Boutique mcbloc.fr → paiement Tebex → livraison en jeu par le proxy.
+// Boutique mcbloc.fr → paiement Stripe → livraison en jeu par le proxy.
 //
-//  1. POST /public/shop/basket   { username }                → panier Tebex (+ lien de connexion Tebex si demandé)
-//  2. POST /public/shop/checkout { basket, items:[{id,qty}] } → paquets créés AU PRIX de network.json → lien de paiement
-//  3. POST /tebex/webhook (IP Tebex + signature)             → achats en attente, identifiants fixes tebex:<tx>:<n>-<k>
-//  4. Le proxy récupère les achats avec les récompenses (/api/rewards/pending), livre une seule fois, puis accuse réception.
+//  1. POST /public/shop/checkout { username, items:[{id,qty}] } → session Stripe AUX PRIX de network.json → lien de paiement
+//  2. POST /stripe/webhook (signature Stripe)                   → achats en attente, identifiants fixes shop:<paiement>:<n>-<k>
+//  3. Le proxy récupère les achats avec les récompenses (/api/rewards/pending), livre une seule fois, puis accuse réception.
 //
-// Remboursement / litige : retrait (tebex-revoke:…) de chaque achat de la transaction + alerte dans #logs. Jamais de ban.
-// Stockage : $DATA_DIR/shop.json.
+// Ce qui a été vendu est enregistré ICI à la création de la session (jamais relu depuis le webhook) ; le montant payé doit
+// correspondre au total enregistré. Remboursement / litige : retrait (shop-revoke:…) de chaque achat du paiement + alerte
+// dans #logs. Jamais de sanction automatique. Stockage : $DATA_DIR/shop.json.
 const fs = require('node:fs');
 const path = require('node:path');
 const config = require('../../config');
-const tebex = require('./tebex');
+const stripe = require('./stripe');
 
 const FILE = path.join(process.env.DATA_DIR || './data', 'shop.json');
 const NAME_RE = /^\w{3,16}$/;
@@ -18,7 +18,7 @@ const UUID_RE = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{1
 const MAX_TRIES = 20;
 const MAX_LINES = 10;
 const MAX_QTY = 12;
-const BASKET_TTL_MS = 6 * 3600 * 1000;
+const SESSION_TTL_MS = 3 * 24 * 3600 * 1000;
 // Mêmes bornes que ShopRepository.Item (proxy) : un article hors bornes n'est jamais vendu.
 const LIMITS = { rankDays: 366, coins: 1_000_000, boosterMin: 60, boosterMax: 7 * 24 * 3600 };
 const BOOSTER_EFFECTS = ['coins', 'xp', 'combo', 'network'];
@@ -28,10 +28,12 @@ let data = null;
 function load() {
   if (data) return data;
   try { data = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { data = {}; }
-  data.baskets ??= {};      // ident → { uuid, name, createdAt, checkedOut }
+  data.sessions ??= {};     // session Stripe → { uuid, name, lines:[{id, qty, cents}], total, createdAt, paidAt? }
+  data.payments ??= {};     // paiement Stripe (payment_intent) → session
   data.rewards ??= {};      // id → { id, type: 'shop'|'shop-revoke', uuid, name, tx, label, item?, of?, status, tries }
-  data.transactions ??= {}; // tx → { uuid, name, rewardIds, status, at }
-  data.webhooks ??= {};     // id du webhook → date (anti-rejeu)
+  data.transactions ??= {}; // paiement → { uuid, name, rewardIds, status, at }
+  data.webhooks ??= {};     // id de l'événement Stripe → date (anti-rejeu)
+  data.early ??= {};        // paiement → type d'événement de retrait reçu AVANT la confirmation du paiement
   return data;
 }
 
@@ -81,7 +83,7 @@ function catalog(cfg = config) {
   return items;
 }
 
-const isOpen = (cfg = config) => cfg.shop?.open === true && tebex.configured();
+const isOpen = (cfg = config) => cfg.shop?.open === true && stripe.configured();
 
 /** Vérifie le panier envoyé par le navigateur : seulement des identifiants connus et des quantités bornées. */
 function checkLines(lines, cfg = config) {
@@ -115,176 +117,156 @@ async function resolvePlayer(username, fetchImpl = globalThis.fetch) {
   return json?.id && UUID_RE.test(json.id) ? { uuid: dashed(json.id), name: json.name } : null;
 }
 
-// ------------------------------------------------------------------ parcours d'achat (routes publiques)
+// ------------------------------------------------------------------ paiement (route publique)
 
 function siteUrl(cfg = config) {
   return String(cfg.links?.site ?? 'https://mcbloc.fr').replace(/\/+$/, '');
 }
 
+const cents = (euros) => Math.round(euros * 100);
+
 function prune(now = Date.now()) {
   const d = load();
-  for (const [ident, b] of Object.entries(d.baskets)) if (now - b.createdAt > BASKET_TTL_MS) delete d.baskets[ident];
+  for (const [id, s] of Object.entries(d.sessions)) if (!s.paidAt && now - s.createdAt > SESSION_TTL_MS) delete d.sessions[id];
   for (const [id, at] of Object.entries(d.webhooks)) if (now - at > 30 * 24 * 3600 * 1000) delete d.webhooks[id];
 }
 
-/** Étape 1 : panier Tebex pour ce pseudo. */
-async function startBasket({ username, ip }, deps = {}) {
-  const fetchImpl = deps.fetch ?? globalThis.fetch;
-  if (!isOpen(deps.config ?? config)) return { status: 403, body: { error: 'shop-closed' } };
-  const player = await resolvePlayer(username, fetchImpl);
-  if (!player) return { status: 400, body: { error: 'invalid-player' } };
-  const site = siteUrl(deps.config ?? config);
-  const basket = await tebex.createBasket({
-    username: player.name, ip,
-    completeUrl: `${site}/boutique/merci`, cancelUrl: `${site}/boutique/panier`,
-    custom: { uuid: player.uuid, username: player.name },
-  }, fetchImpl);
-  const d = load();
-  prune();
-  d.baskets[basket.ident] = { uuid: player.uuid, name: player.name, createdAt: Date.now() };
-  save();
-  let auth = null;
-  if (!basket.username) { // la boutique demande la connexion du joueur à Tebex
-    const links = await tebex.authLinks(basket.ident, `${site}/boutique/paiement?basket=${encodeURIComponent(basket.ident)}`, fetchImpl);
-    auth = Array.isArray(links) ? links[0]?.url ?? null : null;
-  }
-  return { status: 200, body: { basket: basket.ident, player: player.name, auth } };
-}
-
-/** Étape 2 : articles ajoutés au panier, aux prix de network.json, puis lien de paiement. */
-async function checkout({ basket, items }, deps = {}) {
+/** Crée la session de paiement Stripe : pseudo vérifié chez Mojang, articles et prix du catalogue uniquement. */
+async function checkout({ username, items }, deps = {}) {
   const fetchImpl = deps.fetch ?? globalThis.fetch;
   const cfg = deps.config ?? config;
   if (!isOpen(cfg)) return { status: 403, body: { error: 'shop-closed' } };
-  const known = load().baskets[String(basket ?? '')];
-  if (!known) return { status: 404, body: { error: 'unknown-basket' } };
-  if (known.checkedOut) return { status: 409, body: { error: 'basket-used' } };
   const checked = checkLines(items, cfg);
   if (checked.error) return { status: 400, body: { error: checked.error } };
+  const player = await resolvePlayer(username, fetchImpl);
+  if (!player) return { status: 400, body: { error: 'invalid-player' } };
 
-  const packages = checked.lines.map(({ item }) => ({
-    name: item.name,
-    price: item.price,
-    slug: item.id, // obligatoire pour Tebex ; unique dans le panier
-    description: item.name,
-    // « custom » : texte uniquement (doc Tebex). Seul l'identifiant compte à la livraison (relu dans le catalogue).
-    custom: { item: item.id, kind: item.kind, target: item.target, amount: String(item.amount), uuid: known.uuid, name: known.name },
+  const lines = checked.lines.map(({ item, qty }) => ({
+    id: item.id, name: item.name, cents: cents(item.price), qty, kind: item.kind, target: item.target, amount: item.amount,
   }));
-  await tebex.setDynamicPackages(basket, known.name, packages, fetchImpl);
-  const available = await tebex.categoryPackages(basket, fetchImpl);
-  for (const { item, qty } of checked.lines) {
-    const pkg = available.find((p) => p?.name === item.name);
-    if (!pkg) throw new Error(`paquet dynamique introuvable : ${item.name}`);
-    await tebex.addPackage(basket, pkg.id, qty, fetchImpl);
-  }
-  known.checkedOut = Date.now();
+  const total = lines.reduce((sum, l) => sum + l.cents * l.qty, 0);
+  const site = siteUrl(cfg);
+  const session = await stripe.createSession({
+    lines,
+    ref: player.uuid,
+    successUrl: `${site}/boutique/merci`,
+    cancelUrl: `${site}/boutique/panier`,
+    metadata: { uuid: player.uuid, name: player.name },
+    description: `MCBloc — ${player.name}`,
+  }, fetchImpl);
+  if (!session?.id || !session?.url) throw new Error('session Stripe incomplète');
+
+  const d = load();
+  prune();
+  d.sessions[session.id] = {
+    uuid: player.uuid, name: player.name, total, createdAt: Date.now(),
+    lines, // ce qui est vendu est figé ici : livré tel quel même si network.json change ensuite
+  };
   save();
-  const full = await tebex.getBasket(basket, fetchImpl);
-  const link = full?.links?.checkout;
-  if (!link) throw new Error('lien de paiement Tebex absent');
-  return { status: 200, body: { checkout: link } };
+  return { status: 200, body: { checkout: session.url, player: player.name } };
 }
 
-// ------------------------------------------------------------------ webhook Tebex
+// ------------------------------------------------------------------ webhook Stripe
 
-const REVOKE_EVENTS = ['payment.refunded', 'payment.dispute.opened', 'payment.dispute.lost'];
-const INFO_EVENTS = ['payment.dispute.won', 'payment.dispute.closed'];
+const PAID_EVENTS = ['checkout.session.completed', 'checkout.session.async_payment_succeeded'];
+const REVOKE_EVENTS = ['charge.refunded', 'charge.dispute.created'];
+const TX_RE = /^[\w-]{1,64}$/;
 
-/** Article d'un produit payé : données jointes au paquet, sinon nom (paquets dynamiques), jamais le prix payé. */
-function itemOf(product, items) {
-  const custom = typeof product?.custom === 'string' ? safeJson(product.custom) : product?.custom;
-  if (custom?.item && items.has(custom.item)) return { item: items.get(custom.item), custom };
-  const byName = [...items.values()].find((i) => i.name === product?.name);
-  return byName ? { item: byName, custom } : { item: null, custom };
+/** Achats d'une session payée → récompenses en file. Renvoie le nombre d'articles. */
+function queuePaid(d, sessionId, object, alerts) {
+  const session = d.sessions[sessionId];
+  if (!session) {
+    alerts.push(`⚠️ Paiement Stripe **${sessionId}** reçu pour une session inconnue : rien n'a été livré, à vérifier à la main.`);
+    return 0;
+  }
+  const tx = String(object.payment_intent ?? '');
+  if (!TX_RE.test(tx)) {
+    alerts.push(`⚠️ Paiement **${sessionId}** sans identifiant de paiement : rien n'a été livré.`);
+    return 0;
+  }
+  if (object.currency !== 'eur' || Number(object.amount_total) !== session.total) {
+    alerts.push(`🚨 Paiement **${tx}** (${session.name}) : montant ${object.amount_total} ${object.currency} ≠ attendu ${session.total} eur. Rien n'a été livré.`);
+    return 0;
+  }
+  const record = d.transactions[tx] ?? { rewardIds: [], at: Date.now(), status: 'paid' };
+  session.lines.forEach((line, n) => {
+    for (let k = 0; k < line.qty; k += 1) {
+      const id = `shop:${tx}:${n}-${k}`;
+      d.rewards[id] ??= {
+        id, type: 'shop', uuid: session.uuid, name: session.name, tx, label: line.name,
+        item: { kind: line.kind, target: line.target, amount: line.amount, id: line.id }, status: 'pending', tries: 0, createdAt: Date.now(),
+      };
+      if (!record.rewardIds.includes(id)) record.rewardIds.push(id);
+    }
+  });
+  record.uuid = session.uuid;
+  record.name = session.name;
+  record.session = sessionId;
+  d.transactions[tx] = record;
+  d.payments[tx] = sessionId;
+  session.paidAt ??= Date.now();
+  if (d.early[tx]) { // retrait reçu avant la confirmation : on le rejoue maintenant
+    revokeTx(d, tx, d.early[tx], alerts, null);
+    delete d.early[tx];
+  }
+  return record.rewardIds.length;
 }
 
-function safeJson(s) {
-  try { return JSON.parse(s); } catch { return null; }
-}
-
-function buyerOf(subject, product, custom) {
-  const candidates = [custom?.uuid, product?.username?.id, subject?.customer?.username?.id];
-  const uuid = candidates.find((u) => typeof u === 'string' && UUID_RE.test(u));
-  const name = [custom?.name, product?.username?.username, subject?.customer?.username?.username]
-    .find((n) => typeof n === 'string' && NAME_RE.test(n)) ?? '';
-  return uuid ? { uuid: dashed(uuid), name } : null;
+/** Retrait de chaque article livré (ou à livrer) d'un paiement. */
+function revokeTx(d, tx, type, alerts, detail) {
+  const record = d.transactions[tx];
+  if (!record?.rewardIds.length) {
+    d.early[tx] = type;
+    alerts.push(`🚨 **${type}** sur le paiement **${tx}** reçu avant sa confirmation : le retrait sera appliqué dès qu'il arrivera.`);
+    return 0;
+  }
+  for (const of of record.rewardIds) {
+    const id = `shop-revoke:${of.slice('shop:'.length)}`;
+    d.rewards[id] ??= { id, type: 'shop-revoke', of, uuid: record.uuid, name: record.name, tx, label: `Retrait ${of}`, status: 'pending', tries: 0, createdAt: Date.now() };
+  }
+  record.status = type;
+  const what = type === 'charge.refunded' ? 'Remboursement' : 'Litige bancaire (chargeback)';
+  alerts.push(`🚨 **${what}** — ${record.name} · paiement **${tx}** : ${record.rewardIds.length} article(s) retiré(s) automatiquement.${detail ? ` ${detail}` : ''} Aucune sanction automatique.`);
+  return record.rewardIds.length;
 }
 
 /**
- * Traite un webhook déjà authentifié (IP + signature vérifiées par l'appelant).
- * @returns {{ reply: object, alerts: string[] }} réponse HTTP et alertes à envoyer au staff
+ * Traite un événement Stripe déjà authentifié (signature vérifiée par l'appelant).
+ * @returns {{ reply: object, alerts: string[], paid?: {name: string, count: number} }}
  */
-function handleWebhook(body, cfg = config) {
+function handleWebhook(event) {
   const d = load();
-  if (body?.type === 'validation.webhook') return { reply: { id: body.id }, alerts: [] };
   const alerts = [];
-  if (body?.id && d.webhooks[body.id]) return { reply: { ok: true, duplicate: true }, alerts };
-  if (body?.id) d.webhooks[body.id] = Date.now();
-  const subject = body?.subject ?? {};
-  const tx = String(subject.transaction_id ?? '');
-  if (!/^[\w-]{1,64}$/.test(tx)) {
-    save();
-    return { reply: { ok: true, ignored: 'no-transaction' }, alerts };
-  }
+  if (!event?.id || !event?.type) return { reply: { ok: true, ignored: 'bad-event' }, alerts };
+  if (d.webhooks[event.id]) return { reply: { ok: true, duplicate: true }, alerts };
+  d.webhooks[event.id] = Date.now();
+  const object = event.data?.object ?? {};
+  const result = { reply: { ok: true }, alerts };
 
-  if (body.type === 'payment.completed') {
-    const items = catalog(cfg);
-    const products = Array.isArray(subject.products) ? subject.products : [];
-    const record = d.transactions[tx] ?? { rewardIds: [], at: Date.now(), status: 'paid' };
-    products.forEach((product, n) => {
-      const { item, custom } = itemOf(product, items);
-      const buyer = buyerOf(subject, product, custom);
-      if (!item || !buyer) {
-        alerts.push(`⚠️ Achat **${tx}** : article « ${product?.name ?? '?'} » non reconnu ou joueur inconnu — à livrer à la main.`);
-        return;
-      }
-      const qty = Math.min(MAX_QTY, Math.max(1, Number(product.quantity) || 1));
-      for (let k = 0; k < qty; k += 1) {
-        const id = `tebex:${tx}:${n}-${k}`;
-        if (!d.rewards[id]) {
-          d.rewards[id] = {
-            id, type: 'shop', uuid: buyer.uuid, name: buyer.name, tx, label: item.name,
-            item: { kind: item.kind, target: item.target, amount: item.amount, id: item.id }, status: 'pending', tries: 0, createdAt: Date.now(),
-          };
-        }
-        if (!record.rewardIds.includes(id)) record.rewardIds.push(id);
-        record.uuid = buyer.uuid;
-        record.name = buyer.name;
-      }
-    });
-    d.transactions[tx] = record;
-    save();
-    return { reply: { ok: true, queued: record.rewardIds.length }, alerts };
-  }
-
-  if (REVOKE_EVENTS.includes(body.type)) {
-    const record = d.transactions[tx];
-    let ids = record?.rewardIds ?? [];
-    if (!ids.length) { // remboursement reçu avant l'achat : on bloque d'avance chaque article du paiement
-      const products = Array.isArray(subject.products) ? subject.products : [];
-      ids = products.flatMap((p, n) => Array.from({ length: Math.min(MAX_QTY, Math.max(1, Number(p.quantity) || 1)) }, (_, k) => `tebex:${tx}:${n}-${k}`));
-    }
-    const buyer = record?.uuid ? { uuid: record.uuid, name: record.name } : buyerOf(subject, null, null);
-    if (!buyer || !ids.length) {
-      alerts.push(`🚨 **${body.type}** sur **${tx}** : achat introuvable, rien n'a pu être retiré automatiquement.`);
+  if (PAID_EVENTS.includes(event.type)) {
+    if (object.payment_status !== 'paid') { // paiement différé pas encore confirmé : on attend async_payment_succeeded
       save();
-      return { reply: { ok: true, revoked: 0 }, alerts };
+      return { reply: { ok: true, waiting: true }, alerts };
     }
-    for (const of of ids) {
-      const id = `tebex-revoke:${of.slice('tebex:'.length)}`;
-      d.rewards[id] ??= { id, type: 'shop-revoke', of, uuid: buyer.uuid, name: buyer.name, tx, label: `Retrait ${of}`, status: 'pending', tries: 0, createdAt: Date.now() };
+    const count = queuePaid(d, String(object.id ?? ''), object, alerts);
+    result.reply.queued = count;
+    if (count) result.paid = { name: d.sessions[object.id]?.name ?? '?', count, tx: String(object.payment_intent) };
+  } else if (event.type === 'checkout.session.async_payment_failed') {
+    alerts.push(`ℹ️ Paiement différé échoué pour la session **${object.id}** : rien n'est livré.`);
+  } else if (REVOKE_EVENTS.includes(event.type)) {
+    const tx = String(object.payment_intent ?? '');
+    if (TX_RE.test(tx)) {
+      const partial = event.type === 'charge.refunded' && object.amount_refunded < object.amount
+        ? `(remboursement partiel : ${object.amount_refunded / 100} € sur ${object.amount / 100} € — tout a été retiré, à ajuster à la main si besoin)` : null;
+      result.reply.revoked = revokeTx(d, tx, event.type, alerts, partial);
+    } else {
+      alerts.push(`🚨 **${event.type}** sans paiement identifiable (${object.id}) : rien n'a pu être retiré automatiquement.`);
     }
-    d.transactions[tx] = { ...(record ?? { rewardIds: [], at: Date.now() }), uuid: buyer.uuid, name: buyer.name, status: body.type };
-    alerts.push(`🚨 **${body.type === 'payment.refunded' ? 'Remboursement' : 'Litige (chargeback)'}** — ${buyer.name || buyer.uuid} · transaction **${tx}** : ${ids.length} article(s) retiré(s) automatiquement. Aucune sanction automatique.`);
-    save();
-    return { reply: { ok: true, revoked: ids.length }, alerts };
-  }
-
-  if (INFO_EVENTS.includes(body.type)) {
-    alerts.push(`ℹ️ **${body.type}** sur la transaction **${tx}**. Rien n'a été rendu automatiquement : à décider par le staff.`);
+  } else if (event.type === 'charge.dispute.closed') {
+    alerts.push(`ℹ️ Litige **${object.id}** clos (${object.status}). Rien n'a été rendu automatiquement : à décider par le staff.`);
   }
   save();
-  return { reply: { ok: true }, alerts };
+  return result;
 }
 
 // ------------------------------------------------------------------ file pour le proxy
@@ -315,5 +297,5 @@ function acknowledge(id, ok, message) {
 }
 
 module.exports = {
-  catalog, checkLines, isOpen, resolvePlayer, startBasket, checkout, handleWebhook, pendingForBridge, acknowledge, reset, LIMITS,
+  catalog, checkLines, isOpen, resolvePlayer, checkout, handleWebhook, pendingForBridge, acknowledge, reset, LIMITS,
 };

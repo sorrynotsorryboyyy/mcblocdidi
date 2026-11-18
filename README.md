@@ -21,7 +21,7 @@ partenaires, **parrainage récompensé en pièces** et **VIP en jeu pour chaque 
 | `INVITE_REWARD` | *(optionnel)* pièces par invitation validée, 500 par défaut |
 | `MC_HOST` / `MC_PORT` | *(optionnel)* IP du serveur Minecraft |
 | `NETWORK_URL` | *(optionnel)* infos publiques du réseau, `https://mcbloc.fr/network.json` par défaut (liens, jeux, règles, votes) |
-| `TEBEX_PUBLIC_TOKEN`, `TEBEX_PRIVATE_KEY`, `TEBEX_WEBHOOK_SECRET`, `TEBEX_DYNAMIC_CATEGORY` | *(boutique)* clés Tebex : **uniquement ici**, jamais dans le code ni sur le site. Voir « Boutique Tebex » |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | *(boutique)* clés Stripe : **uniquement ici**, jamais dans le code ni sur le site. Voir « Boutique Stripe » |
 | `PUBLIC_ORIGINS` | *(optionnel)* sites autorisés à lire `/public/votes`, `/public/leaderboards` et `/public/guide`, `https://mcbloc.fr,https://www.mcbloc.fr` par défaut |
 
 ### 2. Volume (indispensable)
@@ -68,28 +68,32 @@ de sa config) et le proxy l'envoie au bot (`POST /api/guide`) quand elle change,
 - **`GET /public/guide`** : le guide complet pour le site (pages mcbloc.fr/guide, catalogue des cosmétiques).
 - Colonnes « _… » (icônes, identifiants) : données pour le site, jamais affichées sur Discord.
 
-## 💳 Boutique Tebex (paiements de mcbloc.fr)
+## 💳 Boutique Stripe (paiements de mcbloc.fr)
 
-La boutique est sur le site ; Tebex sert **uniquement à payer**. Aucun produit à créer dans Tebex : le bot crée au moment
-du paiement des « paquets dynamiques » avec le nom et le **prix de `network.json`** (le navigateur n'envoie que des
-identifiants d'articles, jamais de prix).
+La boutique est sur le site ; **Stripe encaisse** (la micro-entreprise est le vendeur). Aucun produit à créer dans Stripe :
+le bot envoie le nom et le **prix de `network.json`** au moment du paiement (le navigateur n'envoie que des identifiants
+d'articles, jamais de prix).
 
 | Étape | Route |
 |---|---|
-| Panier Tebex pour un pseudo (vérifié chez Mojang) | `POST /public/shop/basket` (10 par IP / 10 min) |
-| Articles + lien de paiement | `POST /public/shop/checkout` |
-| Paiement confirmé, remboursé, contesté | `POST /tebex/webhook` : IP Tebex (18.209.80.3, 54.87.231.232) **et** signature `X-Signature` obligatoires |
+| Pseudo vérifié chez Mojang + session de paiement Stripe | `POST /public/shop/checkout` (10 par IP / 10 min) |
+| Paiement confirmé, remboursé, contesté | `POST /stripe/webhook` : signature `Stripe-Signature` obligatoire (5 min max) |
 
-- **Interrupteur unique** : `"shop": { "open": false }` dans `network.json` du site. Fermé = aucun panier créé, boutons désactivés.
-- **Livraison** : par le proxy, avec les récompenses (`/api/rewards/pending`). Identifiant fixe `tebex:<transaction>:<article>` :
-  jamais livré deux fois, même si Tebex renvoie le webhook. Joueur hors ligne : livré à sa connexion.
-- **Remboursement / litige** : retrait automatique (`tebex-revoke:…`) de ce qui a été livré, jamais plus (pièces jusqu'à 0)
-  + alerte dans #logs. Litige gagné : alerte seulement. **Jamais de sanction automatique.**
+- **Interrupteur unique** : `"shop": { "open": false }` dans `network.json` du site. Fermé = aucune session créée, boutons désactivés.
+- **Ce qui est vendu** est enregistré par le bot à la création de la session ; le montant payé doit correspondre, sinon rien
+  n'est livré (alerte).
+- **Livraison** : par le proxy, avec les récompenses (`/api/rewards/pending`). Identifiant fixe `shop:<paiement>:<article>` :
+  jamais livré deux fois, même si Stripe renvoie l'événement. Joueur hors ligne : livré à sa connexion.
+- **Remboursement / litige** : retrait automatique (`shop-revoke:…`) de ce qui a été livré, jamais plus (pièces jusqu'à 0)
+  + alerte dans #logs. Litige clos : alerte seulement. **Jamais de sanction automatique.**
+- **Moyens de paiement** : ceux activés dans le tableau de bord Stripe (cartes, Apple Pay, Google Pay ; PayPal plus tard
+  sans toucher au code).
 - Achats : `$DATA_DIR/shop.json` ; en jeu : tables `mcbloc_purchases`, `mcbloc_boosters`, `mcbloc_network_booster`.
 
-**Configuration Tebex** (une fois) : catégorie de type *dynamic* (son id → `TEBEX_DYNAMIC_CATEGORY`) ; jeton public,
-clé privée (creator.tebex.io/developers/api-keys) ; webhook vers
-`https://<domaine-railway>/tebex/webhook` avec `payment.completed`, `payment.refunded`, `payment.dispute.*`, puis « Validate ».
+**Configuration Stripe** (une fois, en mode test d'abord) : clé secrète → `STRIPE_SECRET_KEY` ; webhook vers
+`https://<domaine-railway>/stripe/webhook` avec `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed` ; son secret
+(`whsec_…`) → `STRIPE_WEBHOOK_SECRET`. À l'ouverture : clé et webhook du mode réel.
 
 ## 🎁 Parrainage et boosts
 

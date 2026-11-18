@@ -61,7 +61,7 @@ function apply(cfg, data) {
     milestones: Array.isArray(data.votes?.milestones) ? data.votes.milestones : [],
   };
 
-  // Boutique : interrupteur + prix (lus par src/utils/shop.js pour créer les articles Tebex). Validés là-bas.
+  // Boutique : interrupteur + prix (lus par src/utils/shop.js pour créer les sessions Stripe). Validés là-bas.
   cfg.shop = {
     open: data.shop?.open === true,
     ranks: Array.isArray(data.ranks) ? data.ranks : [],
