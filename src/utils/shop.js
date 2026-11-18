@@ -165,7 +165,10 @@ async function checkout({ basket, items }, deps = {}) {
   const packages = checked.lines.map(({ item }) => ({
     name: item.name,
     price: item.price,
-    custom: { item: item.id, kind: item.kind, target: item.target, amount: item.amount, uuid: known.uuid, name: known.name },
+    slug: item.id, // obligatoire pour Tebex ; unique dans le panier
+    description: item.name,
+    // « custom » : texte uniquement (doc Tebex). Seul l'identifiant compte à la livraison (relu dans le catalogue).
+    custom: { item: item.id, kind: item.kind, target: item.target, amount: String(item.amount), uuid: known.uuid, name: known.name },
   }));
   await tebex.setDynamicPackages(basket, known.name, packages, fetchImpl);
   const available = await tebex.categoryPackages(basket, fetchImpl);

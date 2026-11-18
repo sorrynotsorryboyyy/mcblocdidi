@@ -119,7 +119,7 @@ test('paiement : paquets créés au prix du catalogue', async () => {
     if (url.startsWith('https://api.mojang.com')) return reply(200, { id: UUID.replace(/-/g, ''), name: 'Steve' });
     if (url.endsWith('/baskets') && init.method === 'POST') return reply(200, { data: { ident: 'b1', username: 'Steve' } });
     if (url.includes('/dynamic-packages')) return reply(200, { data: {} });
-    if (url.includes('/categories/123')) return reply(200, { data: { packages: [{ id: 77, name: 'Grade VIP — 30 jours' }] } });
+    if (url.includes('/categories/123')) return reply(200, { data: { packages: [{ id: 'dyn_34_10', name: 'Grade VIP — 30 jours' }] } });
     if (url.endsWith('/baskets/b1/packages')) return reply(200, { data: {} });
     if (url.endsWith('/baskets/b1')) return reply(200, { data: { links: { checkout: 'https://pay.tebex.io/b1' } } });
     return reply(404, {});
@@ -133,8 +133,9 @@ test('paiement : paquets créés au prix du catalogue', async () => {
   assert.equal(dynamic.method, 'PUT');
   assert.equal(dynamic.body.packages[0].price, 4.99, 'prix de network.json');
   assert.equal(dynamic.body.packages[0].custom.uuid, UUID);
+  assert.equal(dynamic.body.packages[0].slug, 'rank-vip-30j', 'slug obligatoire chez Tebex');
   assert.match(dynamic.auth, /^Basic /);
-  assert.deepEqual(calls.find((c) => c.url.endsWith('/packages')).body, { package_id: 77, quantity: 2 });
+  assert.deepEqual(calls.find((c) => c.url.endsWith('/packages')).body, { package_id: 'dyn_34_10', quantity: 2 });
   assert.equal((await shop.checkout({ basket: 'b1', items: [{ id: 'rank-vip-30j' }] }, { config: cfg, fetch: fakeFetch })).status, 409, 'panier à usage unique');
 });
 
