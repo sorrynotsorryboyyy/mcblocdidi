@@ -191,7 +191,7 @@ function createServer(client, secret) {
         if (req.method === 'DELETE' && url.pathname === '/public/site-link') return send(res, 200, { ok: siteLinks.unlink(bearer(req)) }, cors);
 
         // Boutique : paiement Stripe (fermée tant que shop.open = false dans network.json)
-        if (req.method === 'GET' && url.pathname === '/public/shop/status') return send(res, 200, { open: shop.isOpen() }, cors);
+        if (req.method === 'GET' && url.pathname === '/public/shop/status') return send(res, 200, { open: shop.isOpen(), reason: shop.closedReason() }, cors);
         if (req.method === 'POST' && url.pathname === '/public/shop/checkout') {
           if (!shop.isOpen()) return send(res, 403, { error: 'shop-closed' }, cors);
           if (!allowCheckout(req)) return send(res, 429, { error: 'too-many-requests' }, cors);

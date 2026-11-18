@@ -85,6 +85,15 @@ function catalog(cfg = config) {
 
 const isOpen = (cfg = config) => cfg.shop?.open === true && stripe.configured();
 
+/** Pourquoi la boutique est fermée (diagnostic, sans aucun secret) : null si ouverte. */
+function closedReason(cfg = config) {
+  if (cfg.shop?.open !== true) return 'network-json-closed';
+  const s = stripe.settings();
+  if (!stripe.configured({ ...s, webhookSecret: 'whsec_x' })) return 'stripe-secret-key-missing-or-invalid';
+  if (!stripe.configured(s)) return 'stripe-webhook-secret-missing-or-invalid';
+  return null;
+}
+
 /** Vérifie le panier envoyé par le navigateur : seulement des identifiants connus et des quantités bornées. */
 function checkLines(lines, cfg = config) {
   const items = catalog(cfg);
@@ -297,5 +306,5 @@ function acknowledge(id, ok, message) {
 }
 
 module.exports = {
-  catalog, checkLines, isOpen, resolvePlayer, checkout, handleWebhook, pendingForBridge, acknowledge, reset, LIMITS,
+  catalog, checkLines, isOpen, closedReason, resolvePlayer, checkout, handleWebhook, pendingForBridge, acknowledge, reset, LIMITS,
 };
