@@ -60,11 +60,12 @@ function allowedIp(req, s = settings()) {
 
 // ------------------------------------------------------------------ appels HTTP
 
-async function call(fetchImpl, method, path, { body, basic } = {}) {
+async function call(fetchImpl, method, path, { body } = {}) {
   const s = settings();
   const headers = { Accept: 'application/json', 'User-Agent': 'mcblocdidi' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (basic) headers.Authorization = `Basic ${Buffer.from(`${s.webstore}:${s.privateKey}`).toString('base64')}`;
+  // Tous les appels partent du bot (jamais du navigateur) : authentification privée systématique, exigée par Tebex.
+  headers.Authorization = `Basic ${Buffer.from(`${s.webstore}:${s.privateKey}`).toString('base64')}`;
   const res = await fetchImpl(`${API}${path}`, {
     method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: globalThis.AbortSignal.timeout(15_000),
   });
@@ -108,7 +109,6 @@ async function authLinks(ident, returnUrl, fetchImpl = globalThis.fetch) {
 async function setDynamicPackages(ident, username, packages, fetchImpl = globalThis.fetch) {
   const s = settings();
   return call(fetchImpl, 'PUT', `/accounts/${enc(s.token)}/baskets/${enc(ident)}/dynamic-packages`, {
-    basic: true,
     body: { basket_id: ident, username, category_id: Number(s.category), packages },
   });
 }
