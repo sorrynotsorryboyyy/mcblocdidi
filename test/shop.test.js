@@ -89,6 +89,7 @@ test('session : prix du catalogue envoyés à Stripe, en centimes, pseudo vérif
   assert.equal(form.get('line_items[1][price_data][unit_amount]'), '999');
   assert.equal(form.get('metadata[uuid]'), UUID);
   assert.equal(form.get('payment_method_types[0]'), null, 'moyens de paiement choisis dans le tableau de bord Stripe');
+  assert.equal(form.get('managed_payments[enabled]'), 'false', 'la micro-entreprise reste le vendeur');
   assert.equal(call.init.headers.Authorization, 'Bearer sk_test_abc123');
 
   const unknown = await shop.checkout({ username: 'Inconnu', items: [{ id: 'coins-7000' }] }, { config: cfg, fetch: fakeApis().fetch });

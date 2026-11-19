@@ -64,6 +64,8 @@ async function createSession(p, fetchImpl = globalThis.fetch) {
   return call(fetchImpl, 'POST', '/checkout/sessions', {
     mode: 'payment',
     locale: 'fr',
+    // La micro-entreprise est le vendeur : pas de « Managed Payments » (Stripe vendeur officiel, codes fiscaux obligatoires).
+    managed_payments: { enabled: false },
     success_url: p.successUrl,
     cancel_url: p.cancelUrl,
     client_reference_id: p.ref,
