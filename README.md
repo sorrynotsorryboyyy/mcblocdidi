@@ -136,10 +136,20 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 ## 🌐 Communauté Discord, âge et rôles
 
 - `/setup` **active la Communauté** : niveau de vérification ≥ faible, filtre de contenu pour tous, notifications « mentions seulement », #règles comme salon des règles, **#📣┃discord-updates** (staff) pour les messages de Discord. **#📢┃annonces** devient un salon d'annonces suivable (les annonces du bot sont publiées automatiquement).
-- **Âge** : dans #vérification, le membre accepte le règlement avec « -18 ans » ou « +18 ans ». Les membres déjà vérifiés choisissent leur âge dans #rôles (menu « Ton âge »).
+- **Arrivée en 3 étapes** : #vérification (âge « -18 ans » / « +18 ans ») → #règles apparaît, bouton « J'accepte le règlement » (rôle 📜 Règlement accepté) → #guide apparaît, bouton « J'ai lu le guide » tout en bas → ✅ Membre, tout le serveur se débloque. Les membres déjà vérifiés changent leur âge dans #rôles (menu « Ton âge »).
 - **Notifications** (#rôles) : 🔔 Annonces, 🆕 Mises à jour, 🛠️ Statut serveur (redémarrage du serveur), 🎉 Events, 🎁 Giveaways (mentionné à chaque /giveaway), 📊 Sondages, + un rôle par mini-jeu.
 - `/embed mention:@rôle` : publie un embed en mentionnant un rôle (ex. 🆕 Mises à jour).
-- **#👀┃spoilers** (MINI-JEUX) : avant-premières, seul le staff publie.
+- **#👀┃spoilers** (COMMUNAUTÉ, entre #médias et #suggestions) : avant-premières, seul le staff publie.
+- **#🛒┃achats-boutique** : chaque paiement confirmé est annoncé (pseudo + articles, jamais de montant).
+- **#ℹ️┃infos-serveur** : IP, liens, à quoi servent les tickets et **statut du serveur en direct** (l'ancien #statut-serveur est supprimé). Les bugs passent par les tickets (#bugs supprimé).
+- `/setup nettoyage:true` : corrige en plus le pied de page de tous les anciens messages du bot (« McBlocDidi » → « MCBLOC • play.mcbloc.fr »).
+
+## 🛡️ Espace staff
+
+- **#📢┃annonces-staff** : Fondateur et Admin écrivent, le reste du staff lit.
+- **#🗓️┃absences** : bouton « Déclarer une absence » (du / au / motif) → tableau des absents à jour, fin automatique ; « Je suis de retour » retire ses absences.
+- **#📅┃réunions** + vocal **🔊 Réunion staff** : `/reunion date heure sujet [ordre_du_jour]` → présences par boutons, rappel 1 h avant et au début.
+- **#📋┃tâches** : `/tache titre [priorite] [pour] [details]` → carte « Je m'en occupe » / « Terminée » / « Supprimer » + récapitulatif épinglé.
 
 ## 🚀 Pack lancement
 

@@ -44,11 +44,13 @@ test('#rôles : menu notifications + menu âge à choix unique', () => {
   assert.deepEqual(age.options.map((o) => o.value), ['ageMinor', 'ageAdult']);
 });
 
-test('salons : #spoilers (lecture seule), #discord-updates (staff), #annonces convertible', () => {
+test('salons : #spoilers (lecture seule, Communauté entre #médias et #suggestions), #discord-updates (staff), #annonces convertible', () => {
   const all = config.categories.flatMap((c) => c.channels.map((ch) => ({ ...ch, cat: c.key })));
   const spoilers = all.find((c) => c.key === 'spoilers');
   assert.equal(spoilers.access, 'readonly');
-  assert.equal(spoilers.cat, 'catGames');
+  assert.equal(spoilers.cat, 'catCommunity');
+  const community = config.categories.find((c) => c.key === 'catCommunity').channels.map((c) => c.key);
+  assert.deepEqual(community.slice(community.indexOf('media'), community.indexOf('media') + 3), ['media', 'spoilers', 'suggestions']);
   assert.equal(all.find((c) => c.key === 'discordUpdates').access, 'staff');
   assert.equal(all.find((c) => c.key === 'announcements').announcement, true);
 });

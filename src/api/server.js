@@ -27,7 +27,8 @@ const crypto = require('node:crypto');
 const config = require('../../config');
 const { pendingForBridge, acknowledge } = require('../utils/rewards');
 const { redeemCode } = require('../utils/links');
-const { base } = require('../utils/embeds');
+const { base, shopPurchase } = require('../utils/embeds');
+const { getChannel } = require('../utils/helpers');
 const { sendLog } = require('../utils/logger');
 const monitor = require('../utils/monitor');
 const leaderboards = require('../utils/leaderboards');
@@ -119,6 +120,11 @@ async function stripeWebhook(client, req, res) {
   for (const text of alerts) await staffAlert(client, text);
   if (paid) {
     await staffAlert(client, `✅ Achat **${paid.tx}** de **${paid.name}** : ${paid.count} article(s) en cours de livraison.`, config.colors.success);
+    // Annonce publique (pseudo + articles, jamais de montant) dans #achats-boutique
+    for (const guild of client.guilds.cache.values()) {
+      const feed = getChannel(guild, 'shopFeed');
+      if (feed && paid.items?.length) await feed.send(shopPurchase(paid)).catch((err) => console.error('[boutique] annonce :', err.message));
+    }
   }
   return send(res, 200, reply);
 }

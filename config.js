@@ -167,7 +167,7 @@ module.exports = {
       ],
     },
     {
-      id: 'boutique', label: 'Boutique', emoji: '🛒', description: 'Problème d\'achat ou de grade',
+      id: 'boutique', label: 'Boutique / remboursement', emoji: '🛒', description: 'Achat non reçu, problème de grade, remboursement',
       fields: [
         { id: 'pseudo', label: 'Ton pseudo Minecraft', style: 'short', required: true, max: 16 },
         { id: 'commande', label: 'Article acheté / n° de commande', style: 'short', required: false, max: 100 },
@@ -180,6 +180,14 @@ module.exports = {
         { id: 'pseudo', label: 'Ton pseudo Minecraft', style: 'short', required: false, max: 16 },
         { id: 'jeu', label: 'Mini-jeu concerné', style: 'short', required: false, max: 50 },
         { id: 'bug', label: 'Décris le bug et comment le reproduire', style: 'paragraph', required: true, max: 1000 },
+      ],
+    },
+    {
+      id: 'conflit', label: 'Conflit / litige', emoji: '⚖️', description: 'Un désaccord entre joueurs ou avec une sanction',
+      fields: [
+        { id: 'pseudo', label: 'Ton pseudo Minecraft', style: 'short', required: false, max: 16 },
+        { id: 'personnes', label: 'Personnes concernées', style: 'short', required: true, max: 200 },
+        { id: 'explication', label: 'Explique la situation (+ preuves)', style: 'paragraph', required: true, max: 1000 },
       ],
     },
     {
@@ -253,7 +261,7 @@ module.exports = {
   // ------------------------------------------------------------
   //  Salons et rôles RETIRÉS : /setup les supprime (un salon seulement s'il est vide)
   // ------------------------------------------------------------
-  removed: { channels: ['tournaments'], roles: ['notifTournois'] },
+  removed: { channels: ['tournaments', 'status', 'bugs'], roles: ['notifTournois'] },
 
   // ------------------------------------------------------------
   //  RÔLES (créés du haut vers le bas de la hiérarchie)
@@ -279,6 +287,8 @@ module.exports = {
     pioneer: { name: '🚀 Pionnier', color: 0x3498db, hoist: false, permissions: [] },
     linked: { name: '🔗 Compte lié', color: 0x000000, hoist: false, permissions: [] },
     member: { name: '✅ Membre', color: 0x95a5a6, hoist: false, permissions: [] },
+    // Étape 2 de l'arrivée (règlement accepté, guide pas encore lu) : retiré quand le membre reçoit ✅ Membre
+    rulesAccepted: { name: '📜 Règlement accepté', color: 0x000000, hoist: false, permissions: [] },
     unverified: { name: '🔒 Non vérifié', color: 0x546e7a, hoist: false, permissions: [] },
     // Âge : choisi à la vérification (boutons) ou dans #rôles (menu « Ton âge »)
     ageMinor: { name: '🧒 -18 ans', color: 0x000000, hoist: false, permissions: [], age: true, description: 'J\'ai moins de 18 ans' },
@@ -298,7 +308,7 @@ module.exports = {
 
   // ------------------------------------------------------------
   //  SALONS
-  //  access : public | readonly | rules | verify | staff | voice | counter
+  //  access : public | readonly | rulesGate | guideGate | verify | staff | staffAnnounce | voice | counter
   //  type   : text (défaut) | voice
   // ------------------------------------------------------------
   categories: [
@@ -313,12 +323,12 @@ module.exports = {
     {
       key: 'catInfo', name: '📌 INFORMATIONS',
       channels: [
-        { key: 'rules', name: '📜┃règles', access: 'rules', topic: 'Les règles du serveur' },
-        { key: 'guide', name: '📖┃guide', access: 'readonly', topic: 'Règles, commandes et chiffres de chaque jeu (mis à jour automatiquement depuis le serveur)' },
+        // Arrivée : #vérification (âge) → #règles (bouton « J'accepte ») → #guide (bouton « J'ai lu le guide ») → tout le serveur
+        { key: 'rules', name: '📜┃règles', access: 'rulesGate', topic: 'Les règles du serveur : lis-les puis accepte-les avec le bouton' },
+        { key: 'guide', name: '📖┃guide', access: 'guideGate', topic: 'Règles, commandes et chiffres de chaque jeu (mis à jour automatiquement depuis le serveur)' },
         // announcement: true → converti en salon d'annonces (suivable) une fois la Communauté activée
         { key: 'announcements', name: '📢┃annonces', access: 'readonly', topic: 'Annonces officielles', announcement: true },
-        { key: 'info', name: 'ℹ️┃infos-serveur', access: 'readonly', topic: 'IP, version et liens utiles' },
-        { key: 'status', name: '📊┃statut-serveur', access: 'readonly', topic: 'Statut du serveur Minecraft en direct' },
+        { key: 'info', name: 'ℹ️┃infos-serveur', access: 'readonly', topic: 'IP, version, statut en direct, tickets et liens utiles' },
         { key: 'roles', name: '🎭┃rôles', access: 'readonly', topic: 'Choisis tes rôles' },
         { key: 'partners', name: '🤝┃partenaires', access: 'readonly', topic: 'Nos partenaires' },
       ],
@@ -327,7 +337,7 @@ module.exports = {
       key: 'catWelcome', name: '👋 ACCUEIL',
       channels: [
         { key: 'welcome', name: '👋┃bienvenue', access: 'readonly', topic: 'Arrivées et départs' },
-        { key: 'verify', name: '✅┃vérification', access: 'verify', topic: 'Accepte le règlement pour accéder au serveur' },
+        { key: 'verify', name: '✅┃vérification', access: 'verify', topic: 'Étape 1 : indique ton âge pour commencer' },
       ],
     },
     {
@@ -335,10 +345,12 @@ module.exports = {
       channels: [
         { key: 'general', name: '💬┃général', access: 'public' },
         { key: 'media', name: '📸┃médias', access: 'public', topic: 'Screens, vidéos, clips' },
+        { key: 'spoilers', name: '👀┃spoilers', access: 'readonly', topic: 'Avant-premières : images et vidéos des mini-jeux et des maps' },
         { key: 'suggestions', name: '💡┃suggestions', access: 'readonly', topic: 'Propose tes idées avec /suggestion' },
         { key: 'botCommands', name: '🤖┃commandes-bot', access: 'public', topic: 'Toutes les commandes du bot se font ici (liste épinglée)' },
         { key: 'invites', name: '📨┃invitations', access: 'readonly', topic: 'Invite tes amis et gagne des pièces en jeu ! (/lier puis /invitations)' },
         { key: 'boosters', name: '🚀┃boosters', access: 'readonly', topic: 'Merci à nos boosters ! 1 boost = 1 mois de VIP en jeu' },
+        { key: 'shopFeed', name: '🛒┃achats-boutique', access: 'readonly', topic: 'Les derniers achats sur mcbloc.fr/boutique : merci pour votre soutien !' },
       ],
     },
     {
@@ -348,8 +360,6 @@ module.exports = {
         { key: 'leaderboards', name: '🏅┃classements', access: 'readonly', topic: 'Top des votes, des mini-jeux et des niveaux (mis à jour automatiquement)' },
         { key: 'votes', name: '🗳️┃votes', access: 'readonly', topic: 'Vote pour le serveur et gagne des récompenses en jeu' },
         { key: 'lfg', name: '🔎┃recherche-équipe', access: 'public', topic: 'Utilise /lfg pour trouver des joueurs' },
-        { key: 'spoilers', name: '👀┃spoilers', access: 'readonly', topic: 'Avant-premières : images et vidéos des mini-jeux et des maps' },
-        { key: 'bugs', name: '🐛┃bugs', access: 'public', topic: 'Signale les bugs rencontrés en jeu' },
         // + un salon par mini-jeu (généré automatiquement)
       ],
     },
@@ -370,11 +380,16 @@ module.exports = {
     {
       key: 'catStaff', name: '🛡️ STAFF', access: 'staff',
       channels: [
-        { key: 'staff', name: '🛡️┃staff', access: 'staff' },
+        { key: 'staffAnnounce', name: '📢┃annonces-staff', access: 'staffAnnounce', topic: 'Annonces de la direction (Fondateur / Admin)' },
+        { key: 'staff', name: '🛡️┃staff', access: 'staff', topic: 'Discussion de l\'équipe' },
+        { key: 'staffAbsences', name: '🗓️┃absences', access: 'staff', topic: 'Déclare tes absences avec le bouton du panneau' },
+        { key: 'staffMeetings', name: '📅┃réunions', access: 'staff', topic: 'Réunions du staff : /reunion pour en programmer une' },
+        { key: 'staffTasks', name: '📋┃tâches', access: 'staff', topic: 'Organisation : /tache pour ajouter une tâche' },
         { key: 'logs', name: '📋┃logs', access: 'staff' },
         { key: 'partnersAdmin', name: '🤝┃gestion-partenaires', access: 'staff', topic: 'Ajouter / modifier / retirer un partenaire' },
         { key: 'discordUpdates', name: '📣┃discord-updates', access: 'staff', topic: 'Messages officiels de Discord (Communauté)' },
         { key: 'gameSanctions', name: '🔨┃sanctions-en-jeu', access: 'staff', topic: 'Sanctions appliquées en jeu (envoyées par le proxy)' },
+        { key: 'staffVoice', name: '🔊 Réunion staff', type: 'voice', access: 'staff' },
       ],
     },
   ],

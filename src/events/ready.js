@@ -1,6 +1,7 @@
 const { Events } = require('discord.js');
 const statusUpdater = require('../utils/statusUpdater');
 const giveaways = require('../utils/giveaways');
+const staff = require('../utils/staff');
 const invites = require('../utils/invites');
 const boosts = require('../utils/boosts');
 const levels = require('../utils/levels');
@@ -28,6 +29,7 @@ module.exports = {
     // Minuteurs (tous repartent de l'état en base : rien n'est perdu au redémarrage)
     statusUpdater.start(client);
     giveaways.start(client);
+    staff.start(client); // absences, rappels de réunion
     polls.start(client);
     launch.start(client);
     antiraid.start(client);

@@ -19,6 +19,8 @@ const gameGuide = require('../../utils/gameGuide');
 const launch = require('../../utils/launch');
 const linkedRole = require('../../utils/linkedRole');
 const guide = require('../../utils/guide');
+const staff = require('../../utils/staff');
+const { fixFooters } = require('../../utils/cleanup');
 
 // ---------- Rôles ----------
 async function ensureRole(guild, def, g) {
@@ -60,12 +62,28 @@ function overwritesFor(access, guild, R) {
         { id: R.member, allow: [P.ViewChannel, P.ReadMessageHistory, P.AddReactions], deny: [P.SendMessages] },
         ...staffFull, bot,
       ];
-    case 'rules': // visible même par les non-vérifiés
+    case 'rulesGate': // étape 2 : visible dès que l'âge est indiqué (et toujours pour les membres)
+    case 'guideGate': { // étape 3 : visible dès que le règlement est accepté (et toujours pour les membres)
+      const readers = access === 'rulesGate'
+        ? [R.ageMinor, R.ageAdult, R.rulesAccepted, R.member]
+        : [R.rulesAccepted, R.member];
       return [
-        { id: everyone, allow: [P.ViewChannel, P.ReadMessageHistory], deny: [P.SendMessages, P.AddReactions, P.CreatePublicThreads] },
+        { id: everyone, deny: [P.ViewChannel, P.SendMessages, P.CreatePublicThreads, P.CreatePrivateThreads] },
+        ...readers.filter(Boolean).map((id) => ({ id, allow: [P.ViewChannel, P.ReadMessageHistory], deny: [P.SendMessages, P.AddReactions] })),
         ...staffFull, bot,
       ];
-    case 'verify': // visible uniquement par ceux qui n'ont pas encore le rôle Membre
+    }
+    case 'staffAnnounce': { // la direction écrit, le reste du staff lit et réagit
+      const writers = ['founder', 'admin'].map((k) => R[k]).filter(Boolean);
+      const readers = staff.filter((id) => !writers.includes(id));
+      return [
+        { id: everyone, deny: [P.ViewChannel] },
+        ...readers.map((id) => ({ id, allow: [P.ViewChannel, P.ReadMessageHistory, P.AddReactions], deny: [P.SendMessages] })),
+        ...writers.map((id) => ({ id, allow: [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.MentionEveryone] })),
+        bot,
+      ];
+    }
+    case 'verify': // étape 1 : visible uniquement par ceux qui n'ont pas encore le rôle Membre
       return [
         { id: everyone, allow: [P.ViewChannel, P.ReadMessageHistory], deny: [P.SendMessages, P.AddReactions, P.CreatePublicThreads] },
         { id: R.member, deny: [P.ViewChannel] },
@@ -193,7 +211,9 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup')
     .setDescription('Configure automatiquement le serveur (rôles, salons, embeds)')
-    .setDefaultMemberPermissions(P.Administrator),
+    .setDefaultMemberPermissions(P.Administrator)
+    .addBooleanOption((o) => o.setName('nettoyage')
+      .setDescription('Corrige aussi le pied de page des anciens messages du bot dans tous les salons (plus long)')),
 
   async execute(interaction) {
     const { guild } = interaction;
@@ -258,15 +278,22 @@ module.exports = {
       });
       if (cat.top && category.position !== 0) await category.setPosition(0).catch(() => null);
       const channels = cat.key === 'catGames' ? [...cat.channels, ...gameChannels] : cat.channels;
+      const ordered = [];
       for (const ch of channels) {
-        await ensureChannel(guild, g, {
+        ordered.push(await ensureChannel(guild, g, {
           key: ch.key,
           name: counterNames[ch.key] ?? ch.name,
           type: ch.type === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText,
           parent: category,
           topic: ch.topic,
           overwrites: overwritesFor(ch.access, guild, R),
-        });
+        }));
+      }
+      // Ordre des salons = ordre de config.js (ex. #spoilers entre #médias et #suggestions)
+      const misplaced = ordered.some((c, i) => i > 0 && c.position < ordered[i - 1].position && c.type === ordered[i - 1].type);
+      if (misplaced) {
+        await guild.channels.setPositions(ordered.map((c, i) => ({ channel: c.id, position: i })))
+          .catch((err) => console.error('[setup] ordre des salons :', err.message));
       }
       db.save();
     }
@@ -323,11 +350,12 @@ module.exports = {
     let duplicates = 0;
     duplicates += await ensurePanel(guild, 'rules', 'rules', embeds.rulesPanel(guild));
     duplicates += await ensurePanel(guild, 'verify', 'verify', embeds.verifyPanel(guild));
-    duplicates += await ensurePanel(guild, 'info', 'info', embeds.infoPanel(guild));
+    duplicates += await ensurePanel(guild, 'info', 'info', embeds.infoPanel(guild, status)); // + statut en direct
+    delete g.messages.status; // ancien #statut-serveur : le statut est maintenant dans #infos-serveur
     duplicates += await ensurePanel(guild, 'roles', 'roles', embeds.rolesPanel(guild));
     duplicates += await ensurePanel(guild, 'ticket', 'ticketPanel', embeds.ticketPanel());
-    duplicates += await ensurePanel(guild, 'status', 'status', { embeds: [embeds.statusEmbed(status)] });
     duplicates += await ensurePanel(guild, 'partnersAdmin', 'partnersAdmin', embeds.partnersAdminPanel());
+    duplicates += await staff.refreshPanels(guild); // #absences et #tâches
     duplicates += (await invites.refreshBoard(guild)) ?? 0;
     duplicates += (await boosts.refreshBoard(guild)) ?? 0;
     duplicates += (await levels.refreshBoard(guild, true)) ?? 0;
@@ -354,13 +382,20 @@ module.exports = {
     }
     db.save();
 
-    // 4. Rôle Non vérifié pour les membres qui n'ont pas encore le rôle Membre
-    //    (les membres déjà présents reçoivent directement le rôle Membre)
+    // 3b. Nettoyage (option) : pied de page des anciens messages du bot
+    let footersFixed = null;
+    if (interaction.options.getBoolean('nettoyage')) {
+      await step('Nettoyage des anciens messages du bot (pied de page)...');
+      footersFixed = await fixFooters(guild);
+    }
+
+    // 4. Les membres présents AVANT le bot reçoivent directement le rôle Membre.
+    //    Ceux arrivés depuis (rôle 🔒 Non vérifié) suivent le parcours : âge → règlement → guide.
     await step('Attribution des rôles aux membres existants...');
     const members = await guild.members.fetch();
     let given = 0;
     for (const m of members.values()) {
-      if (m.user.bot || m.roles.cache.has(R.member)) continue;
+      if (m.user.bot || m.roles.cache.has(R.member) || m.roles.cache.has(R.unverified) || m.roles.cache.has(R.rulesAccepted)) continue;
       await m.roles.add(R.member, '/setup : membre déjà présent').catch(() => null);
       given++;
     }
@@ -380,6 +415,12 @@ module.exports = {
         ? `✅ Activée${community.converted.length ? ` — ${community.converted.join(', ')} converti en salon d'annonces` : ''}.`
         : `⚠️ Non activée : ${community.error}\nTu peux l'activer dans Paramètres du serveur → Activer la Communauté (les prérequis sont déjà réglés), puis relancer \`/setup\`.`,
     });
+    if (footersFixed) {
+      summary.addFields({
+        name: '🧽 Nettoyage des anciens messages',
+        value: `${footersFixed.fixed} message(s) corrigé(s) sur ${footersFixed.scanned} message(s) du bot parcourus (${footersFixed.channels} salons).`,
+      });
+    }
     if (removedDuplicates.length) {
       summary.addFields({ name: '🧹 Salons en double supprimés', value: removedDuplicates.join(', ').slice(0, 1024) });
     }

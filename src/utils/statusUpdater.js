@@ -1,21 +1,21 @@
-// Boucle de statut : embed de #statut-serveur, nom du salon, présence du bot,
+// Boucle de statut : statut en direct dans #infos-serveur, présence du bot,
 // salons compteurs et annonce « serveur en ligne ».
 const { ActivityType } = require('discord.js');
 const config = require('../../config');
 const db = require('./db');
 const { getStatus } = require('./mcstatus');
-const { statusEmbed, base, ip } = require('./embeds');
+const { infoPanel, base, ip } = require('./embeds');
+const { ensurePanel } = require('./panels');
 const { getChannel, getRole } = require('./helpers');
 const counters = require('./counters');
 
-const RENAME_COOLDOWN = 10 * 60_000; // Discord limite à 2 renommages / 10 min
-const lastRename = new Map();
 const OFFLINE_CONFIRM = 2; // nb de vérifications hors ligne consécutives avant de considérer le serveur éteint
 let offlineStreak = 0;
 
+/** #infos-serveur : infos + statut en direct dans le même message (l'ancien #statut-serveur a été retiré). */
 async function updateStatusMessage(guild, s) {
   const g = db.guild(guild.id);
-  const ref = g.messages.status;
+  const ref = g.messages.info;
   if (!ref) return;
 
   const channel = guild.channels.cache.get(ref.channelId);
@@ -27,19 +27,10 @@ async function updateStatusMessage(guild, s) {
     return null;
   });
   if (msg) {
-    await msg.edit({ embeds: [statusEmbed(s)] }).catch(() => null);
+    await msg.edit(infoPanel(guild, s)).catch(() => null);
   } else if (deleted) {
     // Le message a été supprimé : on le reposte (une erreur réseau passagère ne crée pas de doublon)
-    const sent = await channel.send({ embeds: [statusEmbed(s)] }).catch(() => null);
-    if (sent) { g.messages.status = { channelId: channel.id, messageId: sent.id }; db.save(); }
-  }
-
-  // 🟢/🔴 dans le nom du salon (uniquement au changement d'état)
-  const wanted = channel.name.replace(/^(🟢|🔴|📊)/u, s.online ? '🟢' : '🔴');
-  const last = lastRename.get(channel.id) ?? 0;
-  if (wanted !== channel.name && Date.now() - last > RENAME_COOLDOWN) {
-    lastRename.set(channel.id, Date.now());
-    channel.setName(wanted).catch(() => null);
+    await ensurePanel(guild, 'info', 'info', infoPanel(guild, s)).catch(() => null);
   }
 }
 

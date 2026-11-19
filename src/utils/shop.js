@@ -259,7 +259,14 @@ function handleWebhook(event) {
     }
     const count = queuePaid(d, String(object.id ?? ''), object, alerts);
     result.reply.queued = count;
-    if (count) result.paid = { name: d.sessions[object.id]?.name ?? '?', count, tx: String(object.payment_intent) };
+    if (count) {
+      const session = d.sessions[object.id];
+      result.paid = {
+        name: session?.name ?? '?', count, tx: String(object.payment_intent),
+        // Libellés pour l'annonce publique (#achats-boutique) : « 2× Pack … », jamais de prix
+        items: (session?.lines ?? []).map((l) => (l.qty > 1 ? `${l.qty}× ${l.name}` : l.name)),
+      };
+    }
   } else if (event.type === 'checkout.session.async_payment_failed') {
     alerts.push(`ℹ️ Paiement différé échoué pour la session **${object.id}** : rien n'est livré.`);
   } else if (REVOKE_EVENTS.includes(event.type)) {

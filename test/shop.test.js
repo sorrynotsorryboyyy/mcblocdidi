@@ -101,7 +101,12 @@ test('webhook payé : une livraison par article, même si Stripe renvoie l\'év�
   await openSession();
   const first = shop.handleWebhook(completed('evt_1', 'cs_test_1', 1997));
   assert.equal(first.reply.queued, 3);
-  assert.deepEqual(first.paid, { name: 'Steve', count: 3, tx: 'pi_1' });
+  const { items, ...paid } = first.paid;
+  assert.deepEqual(paid, { name: 'Steve', count: 3, tx: 'pi_1' });
+  assert.equal(items.length, 2, 'une ligne par article pour #achats-boutique');
+  assert.match(items[0], /^2× Grade .+30 jours$/);
+  assert.match(items[1], /pièces$/);
+  assert.ok(items.every((i) => !/€|\d+[.,]\d{2}\b/.test(i)), 'jamais de prix dans l\'annonce publique');
   assert.equal(shop.handleWebhook(completed('evt_1', 'cs_test_1', 1997)).reply.duplicate, true, 'même événement');
   assert.equal(shop.handleWebhook(completed('evt_2', 'cs_test_1', 1997)).reply.queued, 3, 'autre événement, mêmes ids');
   const pending = shop.pendingForBridge();

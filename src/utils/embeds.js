@@ -17,37 +17,92 @@ const error = (desc) => base(colors.error).setDescription(`❌ ${desc}`);
 
 // ---------- Panneaux postés par /setup ----------
 
+/** À quoi servent les tickets (affiché dans #règles et #infos-serveur). */
+function ticketsHelp(guild) {
+  const panel = getChannel(guild, 'ticketPanel') ?? '#ouvrir-un-ticket';
+  return `Ouvre un ticket dans ${panel} pour :\n`
+    + '🐛 signaler un **bug** · 🛒 un **achat** non reçu ou un **remboursement** · ⚖️ un **conflit** ou une sanction contestée · '
+    + '🚨 **signaler** un joueur · ❓ toute **question** · 📝 **candidater** au staff.';
+}
+
 function rulesPanel(guild) {
-  const verify = getChannel(guild, 'verify');
+  const guide = getChannel(guild, 'guide');
   const embed = base()
     .setTitle(`📜 Règlement de ${config.serverName}`)
     .setDescription(
-      config.rules.map((r, i) => `**${i + 1}.** ${r}`).join('\n\n')
-      + `\n\n> Le non-respect du règlement peut entraîner un avertissement, un mute, un kick ou un ban.`
-      + (verify ? `\n\n➡️ Une fois lu, rends-toi dans ${verify} pour accepter le règlement.` : ''),
+      config.rules.map((r, i) => `**${i + 1}.** ${r}`).join('\n')
+      + '\n\n> Le non-respect du règlement peut entraîner un avertissement, un mute, un kick ou un ban, sur le Discord comme en jeu.',
+    )
+    .addFields(
+      { name: '🎫 Besoin du staff ?', value: ticketsHelp(guild) },
+      { name: '➡️ Étape 2 sur 3', value: `Clique sur **J'accepte le règlement** ci-dessous${guide ? `, puis rends-toi dans ${guide}` : ''}.` },
     )
     .setThumbnail(guild.iconURL());
-  return { embeds: [embed], components: [] };
-}
-
-function verifyPanel(guild) {
-  const rules = getChannel(guild, 'rules');
-  const embed = base(colors.info)
-    .setTitle('✅ Vérification')
-    .setDescription(
-      `Bienvenue sur **${config.serverName}** !\n\n`
-      + `1️⃣ Lis le règlement${rules ? ` dans ${rules}` : ''}.\n`
-      + '2️⃣ Accepte-le en indiquant ton âge avec l\'un des boutons ci-dessous.\n\n'
-      + '> 🔒 Ton âge sert uniquement à adapter les salons et les événements. Tu pourras le modifier dans #rôles.',
-    );
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('verify_accept:minor').setLabel('J\'accepte — j\'ai moins de 18 ans').setEmoji('🧒').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('verify_accept:adult').setLabel('J\'accepte — j\'ai 18 ans ou plus').setEmoji('🧑').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('rules_accept').setLabel('J\'accepte le règlement').setEmoji('✅').setStyle(ButtonStyle.Success),
   );
   return { embeds: [embed], components: [row] };
 }
 
-function infoPanel(guild) {
+function verifyPanel() {
+  const embed = base(colors.info)
+    .setTitle('✅ Vérification')
+    .setDescription(
+      `Bienvenue sur **${config.serverName}** ! Trois étapes rapides pour accéder à tout le serveur :\n\n`
+      + '1️⃣ **Indique ton âge** avec l\'un des boutons ci-dessous.\n'
+      + '2️⃣ **Lis et accepte le règlement** (le salon #règles apparaît juste après).\n'
+      + '3️⃣ **Parcours le guide** et clique sur « J\'ai lu le guide ».\n\n'
+      + '> 🔒 Ton âge sert uniquement à adapter les salons et les événements. Tu pourras le modifier dans #rôles.',
+    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('verify_accept:minor').setLabel('J\'ai moins de 18 ans').setEmoji('🧒').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('verify_accept:adult').setLabel('J\'ai 18 ans ou plus').setEmoji('🧑').setStyle(ButtonStyle.Primary),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+const GUIDE_READ_TITLE = '📖 Tu as tout lu ?';
+
+/** Dernier message de #guide : bouton « J'ai lu le guide » (étape 3, accès à tout le serveur). */
+function guideReadPanel(guild) {
+  const info = getChannel(guild, 'info');
+  const embed = base(colors.success)
+    .setTitle(GUIDE_READ_TITLE)
+    .setDescription(
+      'Tu connais maintenant les règles et le fonctionnement des mini-jeux.\n\n'
+      + '➡️ **Étape 3 sur 3** : clique sur le bouton ci-dessous pour **débloquer tout le serveur** !'
+      + (info ? `\n\nTu pourras retrouver l'IP et les liens utiles dans ${info}.` : ''),
+    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('guide_read').setLabel('J\'ai lu le guide').setEmoji('📖').setStyle(ButtonStyle.Success),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+/** Annonce publique d'un achat dans #achats-boutique : pseudo et articles, jamais de montant. */
+function shopPurchase({ name, items }) {
+  const embed = base(colors.accent)
+    .setTitle('🛒 Nouvel achat sur la boutique !')
+    .setDescription(
+      `**${name}** vient d'acheter :\n${items.slice(0, 10).map((i) => `• ${i}`).join('\n')}`
+      + (items.length > 10 ? `\n• … et ${items.length - 10} autre(s)` : '')
+      + '\n\nMerci pour ton soutien ! 💙',
+    )
+    .setThumbnail(`https://mc-heads.net/avatar/${encodeURIComponent(name)}/64`);
+  const components = config.links.boutique
+    ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel('Boutique').setEmoji('🛒').setURL(config.links.boutique).setStyle(ButtonStyle.Link))]
+    : [];
+  return { embeds: [embed], components };
+}
+
+/** #infos-serveur : infos + statut en direct (2ᵉ embed, mis à jour chaque minute). */
+function infoPanel(guild, status = null) {
+  const panel = infoPanelBase(guild);
+  if (status) panel.embeds.push(statusEmbed(status));
+  return panel;
+}
+
+function infoPanelBase(guild) {
   const embed = base()
     .setTitle(`ℹ️ ${config.serverName} — Infos serveur`)
     .setDescription('Serveur Minecraft **mini-jeux** ! Rejoins-nous avec l\'adresse ci-dessous.')
@@ -66,6 +121,7 @@ function infoPanel(guild) {
           + `🗳️ Vote pour le serveur dans ${getChannel(guild, 'votes') ?? '#votes'} et gagne des récompenses en jeu !`,
         inline: false,
       },
+      { name: '🎫 Tickets', value: ticketsHelp(guild), inline: false },
     )
     .setThumbnail(guild.iconURL());
 
@@ -267,7 +323,7 @@ function welcomeDm(member) {
     .setThumbnail(guild.iconURL())
     .setDescription(
       `Salut **${member.user.username}** ! Voici comment bien démarrer :\n\n`
-      + `**1.** ✅ Accepte le règlement dans ${ch('verify', '#vérification')} (en indiquant ton âge)\n`
+      + `**1.** ✅ Indique ton âge dans ${ch('verify', '#vérification')}, accepte le règlement puis lis le guide : tout le serveur se débloque\n`
       + `**2.** 🔗 Relie ton compte Minecraft : tape \`/lier\` sur le Discord, puis \`/lier <code>\` en jeu\n`
       + `**3.** 🎭 Choisis tes notifications dans ${ch('roles', '#rôles')}\n`
       + `**4.** 🎮 Connecte-toi sur \`${ip()}\` !\n\n`
@@ -278,15 +334,13 @@ function welcomeDm(member) {
 }
 
 function welcomeEmbed(member) {
-  const rules = getChannel(member.guild, 'rules');
   const verify = getChannel(member.guild, 'verify');
   return base()
     .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL() })
     .setTitle('👋 Un nouveau joueur est arrivé !')
     .setDescription(
       `Bienvenue ${member} sur **${config.serverName}** !\n\n`
-      + `${rules ? `📜 Lis le règlement : ${rules}\n` : ''}`
-      + `${verify ? `✅ Puis valide-le dans ${verify}\n` : ''}`
+      + `${verify ? `✅ Commence par ${verify} : âge → règlement → guide, et tout le serveur se débloque.\n` : ''}`
       + `🌐 IP : \`${ip()}\``,
     )
     .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
@@ -300,7 +354,7 @@ function leaveEmbed(member) {
 
 module.exports = {
   base, success, error, ip,
-  rulesPanel, verifyPanel, infoPanel, statusEmbed, rolesPanel, ticketPanel,
+  rulesPanel, verifyPanel, infoPanel, statusEmbed, rolesPanel, ticketPanel, guideReadPanel, GUIDE_READ_TITLE, shopPurchase,
   welcomeEmbed, welcomeDm, leaveEmbed, suggestionMessage, giveawayMessage,
   partnerMessage, partnersAdminPanel,
 };

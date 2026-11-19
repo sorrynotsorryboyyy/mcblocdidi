@@ -3,8 +3,9 @@
 // le proxy l'envoie ici (POST /api/guide) : rien n'est recopié à la main, donc rien ne peut se contredire.
 const config = require('../../config');
 const db = require('./db');
-const { base } = require('./embeds');
+const { base, guideReadPanel, GUIDE_READ_TITLE } = require('./embeds');
 const { ensurePanel, byTitle } = require('./panels');
+const { getChannel } = require('./helpers');
 
 const MAX_SECTIONS = 12;
 const ID_RE = /^[a-z0-9_-]{1,32}$/;
@@ -154,7 +155,34 @@ async function refreshPanels(guild, force = false) {
       .catch((err) => console.error('[guide]', err.message));
     updated++;
   }
+  await ensureGuideReadLast(guild).catch((err) => console.error('[guide] bouton :', err.message));
   return updated;
+}
+
+/**
+ * Bouton « J'ai lu le guide » (étape 3 de l'arrivée) : toujours le DERNIER message de #guide.
+ * Si une section a été ajoutée après lui, il est supprimé puis reposté en bas.
+ */
+async function ensureGuideReadLast(guild) {
+  const channel = getChannel(guild, 'guide');
+  if (!channel?.messages) return;
+  const g = db.guild(guild.id);
+  const payload = guideReadPanel(guild);
+  const last = (await channel.messages.fetch({ limit: 1 }).catch(() => null))?.first() ?? null;
+  const ref = g.messages.guideRead;
+  if (last && ref?.messageId === last.id) {
+    await last.edit(payload).catch(() => null);
+    return;
+  }
+  if (ref?.messageId) await channel.messages.delete(ref.messageId).catch(() => null);
+  // Anciens exemplaires (base perdue) : reconnus par leur titre
+  const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  for (const m of recent?.values() ?? []) {
+    if (m.author.id === guild.members.me.id && m.embeds[0]?.title === GUIDE_READ_TITLE) await m.delete().catch(() => null);
+  }
+  const sent = await channel.send(payload);
+  g.messages.guideRead = { channelId: channel.id, messageId: sent.id };
+  db.save();
 }
 
 /** Une section pour /guide (recherche par identifiant). */
