@@ -2,6 +2,7 @@
 // Relançable sans risque : ce qui existe déjà est réutilisé, rien n'est dupliqué.
 const {
   SlashCommandBuilder, PermissionFlagsBits: P, ChannelType, MessageFlags, GuildSystemChannelFlags,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle,
   GuildVerificationLevel, GuildExplicitContentFilter, GuildDefaultMessageNotifications, GuildFeature, Locale,
 } = require('discord.js');
 const config = require('../../../config');
@@ -122,14 +123,6 @@ function coreName(name) {
 
 let removedDuplicates = []; // rempli par ensureChannel pendant un /setup
 
-/** Un doublon est supprimable seulement s'il est vide (aucun message d'un humain, personne en vocal). */
-async function isDisposable(channel) {
-  if (channel.type === ChannelType.GuildVoice) return channel.members.size === 0;
-  if (!channel.isTextBased()) return false;
-  const msgs = await channel.messages.fetch({ limit: 20 }).catch(() => null);
-  return !!msgs && !msgs.some((m) => !m.author.bot);
-}
-
 /** Texte et annonces = même « type » (un #annonces converti doit être retrouvé, pas recréé). */
 const TEXT_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const sameType = (a, b) => a === b || (TEXT_TYPES.includes(a) && TEXT_TYPES.includes(b));
@@ -173,23 +166,27 @@ async function enableCommunity(guild) {
   return { ok: true, converted };
 }
 
-async function ensureChannel(guild, g, { key, name, type, parent, overwrites, topic }) {
+/**
+ * Crée ou met à jour le salon `key`. AUCUN DOUBLON : tout autre salon du même type et du même nom
+ * (dans N'IMPORTE QUELLE catégorie, ex. un ancien #spoilers resté dans MINI-JEUX) est supprimé,
+ * qu'il contienne des messages ou non. Un salon déplacé dans config.js est donc déplacé, jamais recopié.
+ */
+async function ensureChannel(guild, g, { key, name, type, parent, overwrites, topic }, protectedIds = new Set()) {
   const parentId = parent?.id ?? null;
-  const sameKind = (c) => sameType(c.type, type) && (c.parentId ?? null) === parentId && coreName(c.name) === coreName(name);
+  const sameKind = (c) => sameType(c.type, type) && coreName(c.name) === coreName(name);
   const candidates = guild.channels.cache.filter(sameKind);
+  const inParent = candidates.filter((c) => (c.parentId ?? null) === parentId);
 
   let channel = guild.channels.cache.get(g.channels[key])
-    ?? candidates.find((c) => c.name === name)
+    ?? inParent.find((c) => c.name === name)
+    ?? inParent.sort((a, b) => a.createdTimestamp - b.createdTimestamp).first()
     ?? candidates.sort((a, b) => a.createdTimestamp - b.createdTimestamp).first();
 
-  // Supprime les doublons vides (créés par d'anciens /setup)
   if (channel) {
+    const managed = new Set(Object.values(g.channels)); // salons d'autres clés : jamais touchés ici
     for (const dup of candidates.values()) {
-      if (dup.id === channel.id || dup.type === ChannelType.GuildCategory) continue;
-      if (await isDisposable(dup)) {
-        await dup.delete('/setup : salon en double').catch(() => null);
-        removedDuplicates.push(dup.name);
-      }
+      if (dup.id === channel.id || protectedIds.has(dup.id) || (managed.has(dup.id) && g.channels[key] !== dup.id)) continue;
+      await dup.delete('/setup : salon en double').then(() => removedDuplicates.push(dup.name)).catch(() => null);
     }
   }
 
@@ -207,26 +204,111 @@ async function ensureChannel(guild, g, { key, name, type, parent, overwrites, to
   return channel;
 }
 
+/**
+ * Remise à neuf : supprime tous les salons et catégories sauf `protectedIds` (salon de la commande, tickets ouverts).
+ * Discord refuse de supprimer #règles et le salon des mises à jour d'un serveur Communauté : ils sont réutilisés.
+ */
+async function wipeChannels(guild, g, protectedIds) {
+  await guild.channels.fetch().catch(() => null);
+  const all = [...guild.channels.cache.values()].filter((c) => !c.isThread() && !protectedIds.has(c.id));
+  const ordered = [...all.filter((c) => c.type !== ChannelType.GuildCategory), ...all.filter((c) => c.type === ChannelType.GuildCategory)];
+  let deleted = 0;
+  const failed = [];
+  for (const channel of ordered) {
+    await channel.delete('/setup nettoyage : remise à neuf').then(() => { deleted += 1; }).catch(() => failed.push(channel.name));
+  }
+  // La base oublie les salons et les messages qui n'existent plus
+  for (const [key, id] of Object.entries(g.channels)) if (!guild.channels.cache.has(id)) delete g.channels[key];
+  for (const [key, ref] of Object.entries(g.messages)) if (!guild.channels.cache.has(ref?.channelId)) delete g.messages[key];
+  db.save();
+  return { deleted, failed };
+}
+
+/** Après une remise à neuf : republie partenaires et suggestions en attente ; arrête les giveaways/sondages sans message. */
+async function repostContent(guild, g) {
+  const result = { partners: 0, suggestions: 0, closed: 0 };
+  const gone = (item) => !guild.channels.cache.has(item?.channelId);
+
+  const partners = getChannel(guild, 'partners');
+  for (const p of Object.values(g.partners)) {
+    if (!partners || !gone(p)) continue;
+    const msg = await partners.send(embeds.partnerMessage(p)).catch(() => null);
+    if (msg) { p.channelId = partners.id; p.messageId = msg.id; result.partners += 1; }
+  }
+
+  const suggestions = getChannel(guild, 'suggestions');
+  const pending = Object.values(g.suggestions).filter((s) => s.status === 'pending' && gone(s)).sort((a, b) => a.number - b.number).slice(-25);
+  for (const s of pending) {
+    if (!suggestions) break;
+    const msg = await suggestions.send(embeds.suggestionMessage(s)).catch(() => null);
+    if (msg) { s.channelId = suggestions.id; s.messageId = msg.id; result.suggestions += 1; }
+  }
+
+  for (const item of [...Object.values(g.giveaways), ...Object.values(g.polls)]) {
+    if (!item.ended && gone(item)) { item.ended = true; result.closed += 1; }
+  }
+  db.save();
+  return result;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup')
     .setDescription('Configure automatiquement le serveur (rôles, salons, embeds)')
     .setDefaultMemberPermissions(P.Administrator)
     .addBooleanOption((o) => o.setName('nettoyage')
-      .setDescription('Corrige aussi le pied de page des anciens messages du bot dans tous les salons (plus long)')),
+      .setDescription('⚠️ REMISE À NEUF : supprime TOUS les salons (sauf celui-ci et les tickets ouverts) puis recrée tout')),
 
   async execute(interaction) {
-    const { guild } = interaction;
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.options.getBoolean('nettoyage')) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      return run(interaction, { reset: false });
+    }
+    // Remise à neuf : irréversible → confirmation par bouton (valable 5 minutes)
+    const openTickets = Object.values(db.guild(interaction.guild.id).tickets).filter((id) => interaction.guild.channels.cache.has(id)).length;
+    const warn = embeds.base(config.colors.warning)
+      .setTitle('⚠️ Remise à neuf du Discord')
+      .setDescription(
+        `**Tous les salons et catégories vont être supprimés**, avec leurs messages, sauf ${interaction.channel} (où tu tapes la commande)`
+        + `${openTickets ? ` et les **${openTickets} ticket(s) ouvert(s)**` : ''}. Puis tout est recréé proprement depuis \`config.js\`.\n\n`
+        + '• Les rôles, les comptes liés, les niveaux, les avertissements, les parrainages et les achats sont **conservés** (ils sont en base).\n'
+        + '• Les partenaires et les suggestions en attente sont **republiés**.\n'
+        + '• L\'historique des discussions (#général, #médias…) est **perdu définitivement**.\n\n'
+        + 'Confirme dans les 5 minutes.',
+      );
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`setup_reset:confirm:${Date.now()}`).setLabel('Tout supprimer et recréer').setEmoji('🧨').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('setup_reset:cancel').setLabel('Annuler').setStyle(ButtonStyle.Secondary),
+    );
+    return interaction.reply({ embeds: [warn], components: [row], flags: MessageFlags.Ephemeral });
+  },
+  run: (...args) => run(...args),
+  _internal: { ensureChannel, wipeChannels, coreName }, // tests
+};
 
+/**
+ * Configuration complète. `interaction` est déjà différée (commande) ou mise à jour (bouton de confirmation).
+ * @param {{ reset: boolean }} opts reset = remise à neuf (supprime d'abord tous les salons)
+ */
+async function run(interaction, { reset }) {
+  {
+    const { guild } = interaction;
     const me = guild.members.me;
     if (!me.permissions.has(P.Administrator)) {
-      return interaction.editReply({ embeds: [embeds.error('J\'ai besoin de la permission **Administrateur** pour configurer le serveur.')] });
+      return interaction.editReply({ embeds: [embeds.error('J\'ai besoin de la permission **Administrateur** pour configurer le serveur.')], components: [] });
     }
 
     const g = db.guild(guild.id);
     removedDuplicates = [];
-    const step =(txt) => interaction.editReply({ embeds: [embeds.base(config.colors.info).setDescription(`⏳ ${txt}`)] });
+    const step = (txt) => interaction.editReply({ embeds: [embeds.base(config.colors.info).setDescription(`⏳ ${txt}`)], components: [] });
+    // Jamais supprimés : le salon où la commande est tapée et les tickets ouverts
+    const protectedIds = new Set([interaction.channelId, ...Object.values(g.tickets)]);
+
+    let wiped = null;
+    if (reset) {
+      await step('Remise à neuf : suppression de tous les salons...');
+      wiped = await wipeChannels(guild, g, protectedIds);
+    }
 
     // 0. Mini-jeux renommés (formerIds) : on réutilise l'ancien salon et l'ancien rôle,
     //    qui seront renommés plus bas (les messages sont conservés)
@@ -275,7 +357,7 @@ module.exports = {
       const category = await ensureChannel(guild, g, {
         key: cat.key, name: cat.name, type: ChannelType.GuildCategory,
         overwrites: overwritesFor(cat.access ?? 'public', guild, R),
-      });
+      }, protectedIds);
       if (cat.top && category.position !== 0) await category.setPosition(0).catch(() => null);
       const channels = cat.key === 'catGames' ? [...cat.channels, ...gameChannels] : cat.channels;
       const ordered = [];
@@ -287,7 +369,7 @@ module.exports = {
           parent: category,
           topic: ch.topic,
           overwrites: overwritesFor(ch.access, guild, R),
-        }));
+        }, protectedIds));
       }
       // Ordre des salons = ordre de config.js (ex. #spoilers entre #médias et #suggestions)
       const misplaced = ordered.some((c, i) => i > 0 && c.position < ordered[i - 1].position && c.type === ordered[i - 1].type);
@@ -296,6 +378,13 @@ module.exports = {
           .catch((err) => console.error('[setup] ordre des salons :', err.message));
       }
       db.save();
+    }
+
+    // Tickets ouverts (conservés) : rangés dans la catégorie SUPPORT
+    const support = getChannel(guild, 'catSupport');
+    for (const id of Object.values(g.tickets)) {
+      const ticket = guild.channels.cache.get(id);
+      if (support && ticket && ticket.parentId !== support.id) await ticket.setParent(support.id, { lockPermissions: false }).catch(() => null);
     }
 
     // 2b. Nettoyage : supprime les salons/rôles de mini-jeux retirés de config.js
@@ -315,20 +404,23 @@ module.exports = {
     }
     db.save();
 
-    // 2b'. Nettoyage : salons et rôles retirés de config.js (config.removed).
-    //      Un salon n'est supprimé que s'il est vide (aucun message d'un humain) ; sinon il est gardé et signalé.
+    // 2b'. Nettoyage : salons et rôles retirés de config.js (config.removed), supprimés même s'ils contiennent des messages.
+    //      Retrouvés par leur clé enregistrée, ou par leur nom (config.removed.channelNames) si la base les a oubliés.
     const removedItems = [];
-    const keptChannels = [];
+    const managed = new Set(Object.entries(g.channels).filter(([k]) => !(config.removed?.channels ?? []).includes(k)).map(([, id]) => id));
+    const removedNames = new Set((config.removed?.channelNames ?? []).map(coreName));
+    const toRemove = new Map();
     for (const key of config.removed?.channels ?? []) {
       const ch = guild.channels.cache.get(g.channels[key]);
-      if (ch && await isDisposable(ch)) {
-        await ch.delete('/setup : salon retiré de config.js').catch(() => null);
-        removedItems.push(`#${ch.name}`);
-      } else if (ch) {
-        keptChannels.push(`#${ch.name}`);
-        continue; // gardé : on conserve aussi sa clé
-      }
+      if (ch) toRemove.set(ch.id, ch);
       delete g.channels[key];
+    }
+    for (const ch of guild.channels.cache.values()) {
+      if (ch.type !== ChannelType.GuildCategory && removedNames.has(coreName(ch.name)) && !managed.has(ch.id) && !protectedIds.has(ch.id)) toRemove.set(ch.id, ch);
+    }
+    for (const ch of toRemove.values()) {
+      if (protectedIds.has(ch.id)) continue;
+      await ch.delete('/setup : salon retiré de config.js').then(() => removedItems.push(`#${ch.name}`)).catch(() => null);
     }
     for (const key of config.removed?.roles ?? []) {
       const role = guild.roles.cache.get(g.roles[key]);
@@ -364,6 +456,7 @@ module.exports = {
     await leaderboards.refreshPanels(guild, true);
     await gameGuide.refreshPanels(guild, true); // #guide (si le serveur Minecraft a déjà publié le guide)
     const relinked = await linkedRole.repairAll(guild);
+    const reposted = reset ? await repostContent(guild, g) : null;
 
     // Messages système Discord (boosts) → #logs (staff) : ils déclenchent la récompense,
     // et c'est le bot qui remercie publiquement dans #boosters (pas de doublon visible).
@@ -384,7 +477,7 @@ module.exports = {
 
     // 3b. Nettoyage (option) : pied de page des anciens messages du bot
     let footersFixed = null;
-    if (interaction.options.getBoolean('nettoyage')) {
+    if (reset) {
       await step('Nettoyage des anciens messages du bot (pied de page)...');
       footersFixed = await fixFooters(guild);
     }
@@ -415,6 +508,17 @@ module.exports = {
         ? `✅ Activée${community.converted.length ? ` — ${community.converted.join(', ')} converti en salon d'annonces` : ''}.`
         : `⚠️ Non activée : ${community.error}\nTu peux l'activer dans Paramètres du serveur → Activer la Communauté (les prérequis sont déjà réglés), puis relancer \`/setup\`.`,
     });
+    if (wiped) {
+      summary.addFields({
+        name: '🧨 Remise à neuf',
+        value: `${wiped.deleted} salon(s)/catégorie(s) supprimé(s)`
+          + (wiped.failed.length ? `. Non supprimables (exigés par Discord, réutilisés) : ${wiped.failed.join(', ')}` : '')
+          + (reposted ? `.
+🔁 Republiés : ${reposted.partners} partenaire(s), ${reposted.suggestions} suggestion(s) en attente`
+            + (reposted.closed ? `. ${reposted.closed} giveaway(s)/sondage(s) en cours arrêté(s) (leur message a été supprimé)` : '') : '')
+          + '.',
+      });
+    }
     if (footersFixed) {
       summary.addFields({
         name: '🧽 Nettoyage des anciens messages',
@@ -433,18 +537,12 @@ module.exports = {
     if (removedItems.length) {
       summary.addFields({ name: '🗑️ Salons et rôles retirés', value: removedItems.join(', ').slice(0, 1024) });
     }
-    if (keptChannels.length) {
-      summary.addFields({
-        name: '⚠️ Salons retirés mais conservés',
-        value: `${keptChannels.join(', ')} contient des messages : supprime-le à la main s'il ne sert plus.`.slice(0, 1024),
-      });
-    }
     if (skipped.length) {
       summary.addFields({
         name: '⚠️ Rôles non modifiables',
         value: `Ces rôles sont au-dessus du mien, je n'ai pas pu les mettre à jour : ${skipped.join(', ')}.\nMonte mon rôle tout en haut dans Paramètres → Rôles.`,
       });
     }
-    return interaction.editReply({ embeds: [summary] });
-  },
-};
+    return interaction.editReply({ embeds: [summary], components: [] });
+  }
+}

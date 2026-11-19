@@ -142,7 +142,8 @@ Après une modification : `git push`, puis **`/setup`** si tu as touché aux sal
 - **#👀┃spoilers** (COMMUNAUTÉ, entre #médias et #suggestions) : avant-premières, seul le staff publie.
 - **#🛒┃achats-boutique** : chaque paiement confirmé est annoncé (pseudo + articles, jamais de montant).
 - **#ℹ️┃infos-serveur** : IP, liens, à quoi servent les tickets et **statut du serveur en direct** (l'ancien #statut-serveur est supprimé). Les bugs passent par les tickets (#bugs supprimé).
-- `/setup nettoyage:true` : corrige en plus le pied de page de tous les anciens messages du bot (« McBlocDidi » → « MCBLOC • play.mcbloc.fr »).
+- **Aucun doublon** : à chaque `/setup`, un salon du même nom resté ailleurs (ex. après un déplacement dans `config.js`) est supprimé, même s'il contient des messages ; les salons retirés de `config.js` aussi. Les embeds sont toujours édités en place (un seul exemplaire).
+- `/setup nettoyage:true` : **remise à neuf** (après confirmation) : supprime tous les salons et catégories sauf celui où la commande est tapée et les tickets ouverts, puis recrée tout. Rôles, comptes liés, niveaux, avertissements, achats conservés ; partenaires et suggestions en attente republiés. Discord interdit de supprimer #règles et #discord-updates (Communauté) : ils sont réutilisés.
 
 ## 🛡️ Espace staff
 

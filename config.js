@@ -261,7 +261,12 @@ module.exports = {
   // ------------------------------------------------------------
   //  Salons et rôles RETIRÉS : /setup les supprime (un salon seulement s'il est vide)
   // ------------------------------------------------------------
-  removed: { channels: ['tournaments', 'status', 'bugs'], roles: ['notifTournois'] },
+  // channelNames : noms (sans emoji) pour les retrouver même si la base du bot ne les connaît plus
+  removed: {
+    channels: ['tournaments', 'status', 'bugs'],
+    channelNames: ['tournois', 'statut-serveur', 'bugs'],
+    roles: ['notifTournois'],
+  },
 
   // ------------------------------------------------------------
   //  RÔLES (créés du haut vers le bas de la hiérarchie)

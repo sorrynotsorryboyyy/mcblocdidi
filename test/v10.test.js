@@ -130,3 +130,73 @@ test('staff : tâches (numérotées, prise en charge, récapitulatif)', () => {
   assert.ok(recap.fields[0].value.includes('Maps CoreWars'), 'à faire');
   assert.ok(recap.fields[1].value.includes('Annonce'), 'en cours');
 });
+
+// ---------- Aucun doublon de salons, remise à neuf ----------
+const { Collection, ChannelType } = require('discord.js');
+const db = require('../src/utils/db');
+
+function fakeChannels(list) {
+  const cache = new Collection();
+  const deleted = [];
+  for (const c of list) {
+    const ch = {
+      createdTimestamp: 0, parentId: null, position: 0, isThread: () => false, ...c,
+      async delete() { if (c.undeletable) throw new Error('requis'); cache.delete(ch.id); deleted.push(ch.name); },
+      async edit(e) { if (e.parent) ch.parentId = e.parent; if (e.name) ch.name = e.name; return ch; },
+    };
+    cache.set(ch.id, ch);
+  }
+  return { guild: { id: 'dedupe', channels: { cache, fetch: async () => cache } }, cache, deleted };
+}
+
+test('aucun doublon : un salon déplacé laisse son ancien exemplaire supprimé (même avec des messages)', async () => {
+  const { ensureChannel } = require('../src/commands/admin/setup')._internal;
+  const { guild, deleted } = fakeChannels([
+    { id: 'old', name: '👀┃spoilers', type: ChannelType.GuildText, parentId: 'catGames' },
+    { id: 'new', name: '👀┃spoilers', type: ChannelType.GuildText, parentId: 'catCommunity' },
+    { id: 'here', name: '👀┃spoilers', type: ChannelType.GuildText, parentId: 'x' },
+  ]);
+  const g = { channels: { spoilers: 'new' } };
+  const ch = await ensureChannel(guild, g, { key: 'spoilers', name: '👀┃spoilers', type: ChannelType.GuildText, parent: { id: 'catCommunity' }, overwrites: [] }, new Set(['here']));
+  assert.equal(ch.id, 'new');
+  assert.deepEqual(deleted, ['👀┃spoilers'], 'l\'ancien est supprimé, le salon de la commande est protégé');
+  assert.ok(guild.channels.cache.has('here'));
+});
+
+test('aucun doublon : base perdue → le salon existant est déplacé, pas recréé', async () => {
+  const { ensureChannel } = require('../src/commands/admin/setup')._internal;
+  const { guild, deleted } = fakeChannels([{ id: 'old', name: '👀┃spoilers', type: ChannelType.GuildText, parentId: 'catGames' }]);
+  const g = { channels: {} };
+  const ch = await ensureChannel(guild, g, { key: 'spoilers', name: '👀┃spoilers', type: ChannelType.GuildText, parent: { id: 'catCommunity' }, overwrites: [] });
+  assert.equal(ch.id, 'old');
+  assert.equal(ch.parentId, 'catCommunity');
+  assert.deepEqual(deleted, []);
+});
+
+test('remise à neuf : tout est supprimé sauf le salon de la commande et les tickets ouverts', async () => {
+  const { wipeChannels } = require('../src/commands/admin/setup')._internal;
+  const { guild, deleted, cache } = fakeChannels([
+    { id: 'cat', name: '🛡️ STAFF', type: ChannelType.GuildCategory },
+    { id: 'staff', name: '🛡️┃staff', type: ChannelType.GuildText, parentId: 'cat' },
+    { id: 'gen', name: '💬┃général', type: ChannelType.GuildText },
+    { id: 'rules', name: '📜┃règles', type: ChannelType.GuildText, undeletable: true },
+    { id: 'ticket', name: 'ticket-steve', type: ChannelType.GuildText },
+  ]);
+  const g = db.guild('wipe');
+  Object.assign(g.channels, { staff: 'staff', general: 'gen', rules: 'rules' });
+  g.messages.info = { channelId: 'gen', messageId: 'm' };
+  const r = await wipeChannels(guild, g, new Set(['staff', 'ticket']));
+  assert.equal(r.deleted, 2, '#général + la catégorie');
+  assert.deepEqual(r.failed, ['📜┃règles']);
+  assert.deepEqual([...cache.keys()].sort(), ['rules', 'staff', 'ticket']);
+  assert.deepEqual(g.channels, { staff: 'staff', rules: 'rules' }, 'la base oublie les salons supprimés');
+  assert.equal(g.messages.info, undefined);
+  assert.ok(deleted.indexOf('🛡️ STAFF') > deleted.indexOf('💬┃général'), 'catégories supprimées en dernier');
+});
+
+test('remise à neuf : confirmation obligatoire, et retrouvée par nom pour les salons retirés', () => {
+  assert.deepEqual(require('../src/handlers/setupReset').prefixes, ['setup_reset']);
+  const { coreName } = require('../src/commands/admin/setup')._internal;
+  const names = config.removed.channelNames.map(coreName);
+  for (const old of ['🐛┃bugs', '🟢┃statut-serveur', '📊┃statut-serveur']) assert.ok(names.includes(coreName(old)), old);
+});
